@@ -1,8 +1,14 @@
-# Oracle — Agente Orchestratore Autonomo
+# Oracle — Agente Orchestratore Autonomo + MCP Agnostic Gateway
 
-**Oracle** è l'agente orchestratore decisionale del sistema, nonché interfaccia applicativa principale. Progettato per analizzare, pianificare ed eseguire task complessi di ingegneria del software, Oracle opera con un sistema di autolimitazione costituzionale e un ecosistema di tool avanzati per il decision-making multi-livello.
+**Oracle** è sia l'agente orchestratore decisionale del sistema (basato su Agno + DeepSeek) sia un **ecosistema di 14 tool autonomi** esposti come server MCP (Model Context Protocol). Questo significa che puoi usare Oracle in **tre modi indipendenti**:
 
-> **Ruolo:** Orchestratore decisionale, agente di coding autonomo e interfaccia applicativa. Oracle analizza la complessità del task, sceglie la strategia ottimale (risposta diretta, verifica codice, o esplorazione MCTS), coordina l'esecuzione e comunica direttamente con l'utente tramite frontend e API — sempre all'interno del perimetro costituzionale.
+| Modalità | Descrizione | Per chi |
+|----------|-------------|--------|
+| **🤖 Agente nativo** | Agno + DeepSeek con loop agente, memoria, frontend web | Chi vuole l'esperienza completa Oracle |
+| **🔌 MCP Server** | 14 tool esposti via MCP — qualsiasi agente compatibile (Claude Code, Codex, OpenCode, Cursor) | Chi vuole usare i tool Oracle con il proprio agente preferito |
+| **🖥️ CLI manuale** | Interfaccia terminale navigabile per usare i tool senza LLM | Chi vuole controllo manuale diretto |
+
+> **Filosofia:** I 14 tool in `tools/` sono indipendenti dall'LLM — ognuno ha già un entry point CLI con argparse. L'accoppiamento con DeepSeek/Agno è solo in `coding_agent.py`, `model_factory.py` e `cli.py`. I tool stessi non dipendono da loro.
 
 ---
 
@@ -10,15 +16,16 @@
 
 1. [Panoramica](#panoramica)
 2. [Architettura](#architettura)
-3. [Toolset Completo](#toolset-completo)
-4. [Sistemi Avanzati](#sistemi-avanzati)
-5. [Sicurezza e Costituzione](#sicurezza-e-costituzione)
-6. [Installazione](#installazione)
-7. [Configurazione](#configurazione)
-8. [Utilizzo](#utilizzo)
-9. [Struttura del Progetto](#struttura-del-progetto)
-10. [Sistema di Memoria](#sistema-di-memoria)
-11. [Requisiti](#requisiti)
+3. [Tre Modalità d'Uso](#tre-modalità-duso)
+4. [Toolset Completo](#toolset-completo)
+5. [Sistemi Avanzati](#sistemi-avanzati)
+6. [Sicurezza e Costituzione](#sicurezza-e-costituzione)
+7. [Installazione](#installazione)
+8. [Configurazione](#configurazione)
+9. [Utilizzo](#utilizzo)
+10. [Struttura del Progetto](#struttura-del-progetto)
+11. [Sistema di Memoria](#sistema-di-memoria)
+12. [Requisiti](#requisiti)
 
 ---
 
@@ -39,51 +46,36 @@ Oracle è un agente AI autonomo che sa:
 
 ---
 
-## Architettura
+## Architettura — Tre Punti d'Ingresso
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        ORACLE PROTOCOL                              │
-│                     (oracle_protocol.py)                             │
-│  ComplexityDetector → tier detection: simple | standard | complex   │
-└──────────────────────┬──────────────────────────────────────────────┘
-                       │
-          ┌────────────┼────────────┐
-          ▼            ▼            ▼
-   ┌──────────┐ ┌──────────┐ ┌──────────┐
-   │  SIMPLE  │ │ STANDARD │ │ COMPLEX  │
-   │ Flash    │ │ Flash +  │ │ MCTS +   │
-   │ Direct   │ │ Sandbox  │ │ Sandbox +│
-   │          │ │ Verify   │ │ SCF      │
-   └──────────┘ └──────────┘ └──────────┘
-                                       │
-          ┌────────────────────────────┘
-          ▼
-   ┌──────────────────────────────────────────────────┐
-   │              TOOL ECOSYSTEM                       │
-   │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
-   │  │   MCTS   │ │ Sandbox  │ │   SCF (Context   │  │
-   │  │  Engine  │ │(Code Exec)│ │    Filter)       │  │
-   │  └──────────┘ └──────────┘ └──────────────────┘  │
-   │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
-   │  │Immunity  │ │ Vector   │ │  Constitution    │  │
-   │  │Guardian  │ │ Memory   │ │   Enforcer       │  │
-   │  └──────────┘ └──────────┘ └──────────────────┘  │
-   │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │
-   │  │ Gmail    │ │ WikiTool │ │  Web Access      │  │
-   │  │ Client   │ │          │ │                   │  │
-   │  └──────────┘ └──────────┘ └──────────────────┘  │
-   └──────────────────────────────────────────────────┘
-                       │
-          ┌────────────┴────────────┐
-          ▼                         ▼
-   ┌──────────────┐       ┌────────────────┐
-   │    API       │       │    DATA        │
-   │  auth/auth   │       │  vector_memory │
-   │  rate_limit  │       │  constitution  │
-   │  security    │       │  users.db      │
-   └──────────────┘       └────────────────┘
-```
+┌─────────────────────────────────────────────────────────────┐
+│                     ORACLE TOOLS (14)                       │
+│  tools/*.py — ognuno con argparse CLI entry point           │
+│  mcts_engine, vector_memory, web_access, wiki_tool,         │
+│  gmail_client, immunity_guardian, interleaved_sandbox,      │
+│  constitution, environment_probe, multimodal_encoder,        │
+│  semantic_context_filter, oracle_orchestrator,               │
+│  oracle_protocol, chunk_filter                               │
+└─────────┬────────────────────┬──────────────────┬────────────┘
+          │                    │                  │
+          ▼                    ▼                  ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│  🖥️ CLI MANUALE   │ │  🔌 MCP SERVER    │ │  🤖 AGENTE       │
+│                  │ │                  │ │  NATIVO         │
+│ oracle_tools_cli │ │ mcp_server.py    │ │                 │
+│ .py              │ │                  │ │ coding_agent.py │
+│                  │ │ Claude Code      │ │ cli.py          │
+│ Menu interattivo │ │ Codex            │ │ model_factory   │
+│ Esecuzione diretta│ │ OpenCode         │ │ .py             │
+│ Nessun LLM       │ │ Cursor           │ │ Agno+DeepSeek   │
+└──────────────────┘ │ Qualsiasi agente  │ │ Frontend web    │
+                     │ MCP-compatibile   │ └──────────────────┘
+                     └──────────────────┘
+
+### Oracle Protocol — Orchestratore Multi-Livello (solo agente nativo)
+
+Il cuore di Oracle è l'**Oracle Protocol** (`tools/oracle_protocol.py`), che integra tre pilastri:
 
 ### Oracle Protocol — Orchestratore Multi-Livello
 
@@ -104,6 +96,54 @@ Classifica automaticamente ogni task in tre livelli:
 | **simple** | Domanda breve, nessuna keyword complessa | Risposta diretta DeepSeek Flash |
 | **standard** | Task normale con codice | Flash + Sandbox verification |
 | **complex** | Refactoring, architettura, multi-file, security audit | MCTS → Sandbox → SCF → iterazione |
+
+---
+
+## Tre Modalità d'Uso
+
+### 1. 🤖 Agente Nativo (Agno + DeepSeek)
+
+L'esperienza originale Oracle con loop agente, memoria persistente, frontend web chat e orchestrazione multi-livello.
+
+```bash
+python cli.py              # CLI interattiva con DeepSeek
+python coding_agent.py     # Server web + API su :8000
+```
+
+### 2. 🔌 MCP Server (Agnostico)
+
+Espone tutti i 14 tool come tool MCP standard. Qualsiasi agente compatibile con MCP (Claude Code, Codex, OpenCode, Cursor) può usarli.
+
+```bash
+# Modalità stdio (per Claude Code, Codex, ecc.)
+python mcp_server.py
+
+# Modalità HTTP con Web UI interattiva
+python mcp_server.py --http --port 8100
+# Apri http://localhost:8100
+```
+
+La Web UI permette di:
+- Navigare tutti i tool con descrizioni e parametri
+- Compilare form interattivi per ogni tool
+- Eseguire tool e vedere i risultati
+- Copiare il comando CLI equivalente
+
+### 3. 🖥️ CLI Manuale
+
+Interfaccia terminale navigabile per usare i tool senza alcun LLM.
+
+```bash
+python oracle_tools_cli.py              # Menu interattivo
+python oracle_tools_cli.py web_access get https://example.com  # Esecuzione diretta
+python oracle_tools_cli.py --list       # Elenca tool
+```
+
+Il menu interattivo mostra:
+- Tutti i 14 tool con icone e descrizioni
+- Comandi disponibili per ogni tool
+- Creazione guidata dei parametri
+- Esecuzione e output
 
 ---
 
@@ -270,44 +310,138 @@ SECRET_KEY=your-secret-key
 
 ## Utilizzo
 
-### Web UI (Chatbot)
+### 🔌 MCP Server (per qualsiasi agente AI)
+
+Il server MCP espone i 14 tool Oracle come tool MCP standard, utilizzabili da Claude Code, Codex, OpenCode, Cursor e qualsiasi agente MCP-compatibile.
+
+```bash
+# Modalità stdio (default, per Claude Code, Codex, ecc.)
+python mcp_server.py
+
+# Modalità HTTP con Web UI interattiva
+python mcp_server.py --http --port 8100
+```
+
+Apri `http://localhost:8100` — Web UI con:
+- Schede per ogni tool con descrizione e parametri
+- Form interattivi per compilare argomenti
+- Pulsante ▶ Run per eseguire
+- Output in tempo reale
+- Pulsante 📋 Copy CLI per copiare il comando equivalente
+
+**Configurazione per Claude Code:**
+```json
+{
+  "mcpServers": {
+    "oracle": {
+      "command": "python",
+      "args": ["oracle-rui/mcp_server.py"],
+      "cwd": "."
+    }
+  }
+}
+```
+
+### 🖥️ CLI Manuale (senza LLM)
+
+Menu interattivo per esplorare e usare i tool manualmente.
+
+```bash
+# Menu interattivo con navigazione
+python oracle_tools_cli.py
+
+# Esecuzione diretta di un tool
+python oracle_tools_cli.py web_access get https://example.com
+python oracle_tools_cli.py vector_memory search --collection docs --query "test" --top-k 5
+python oracle_tools_cli.py immunity_guardian session
+python oracle_tools_cli.py environment_probe dep --package httpx
+
+# Help di un tool
+python oracle_tools_cli.py --help
+python oracle_tools_cli.py web_access --help
+
+# Lista tool
+python oracle_tools_cli.py --list
+```
+
+### 🖥️ Agente Nativo (Web UI)
 
 ```bash
 python coding_agent.py --port 8000
 ```
 Apri `http://localhost:8000/ui`
 
-### CLI Interattiva
+### 🖥️ Agente Nativo (CLI Interattiva)
 
 ```bash
 python cli.py
 ```
 
-### Oracle Protocol CLI
+### 🖥️ Esecuzione Diretta dei Tool
+
+Ogni tool può anche essere eseguito direttamente:
 
 ```bash
-# Analisi con auto-detection del tier
-python tools/oracle_protocol.py analyze --task "Refactor modulo CRUD per async/await"
+# Web Access
+python tools/web_access.py get https://example.com
+python tools/web_access.py scrape https://example.com --selector "h1" --extract text
+python tools/web_access.py cache --stats
 
-# Forza tier specifico
-python tools/oracle_protocol.py analyze --task "Ciao!" --tier simple
-python tools/oracle_protocol.py analyze --task "Analisi di sicurezza complessa" --tier complex
+# Vector Memory
+python tools/vector_memory.py add --collection docs --id doc1 --text "Contenuto"
+python tools/vector_memory.py search --collection docs --query "test" --top-k 5
+python tools/vector_memory.py info
 
-# Output JSON
-python tools/oracle_protocol.py analyze --task "..." --json
+# MCTS Engine
+python tools/mcts_engine.py analyze --task "Refactor modulo CRUD per async/await"
+python tools/mcts_engine.py branches --task "Build REST API" --count 3
 
-# Stato orchestratore
-python tools/oracle_protocol.py status
+# Immunity Guardian
+python tools/immunity_guardian.py session
+python tools/immunity_guardian.py check --text "Test injection"
 
-# Task via pipe
-cat task.txt | python tools/oracle_protocol.py analyze
+# Constitution
+python tools/constitution.py check --action "read_file"
+python tools/constitution.py pending --list
+
+# Environment Probe
+python tools/environment_probe.py dep --package httpx --json
+python tools/environment_probe.py port --host smtp.gmail.com --port 587
+
+# Gmail
+python tools/gmail_client.py list --max-results 5
+python tools/gmail_client.py send --to user@example.com --subject "Test" --body "Ciao"
+
+# Wiki
+python tools/wiki_tool.py list
+python tools/wiki_tool.py read home
+python tools/wiki_tool.py write home --content "<h1>Test</h1>"
+```
+
+### Avvio Completo con run.py
+
+```bash
+# Solo Oracle Core
+python run.py
+
+# Con MCP Server
+python run.py --with-mcp
+
+# Con Penelope + Archimede
+python run.py --all
+
+# Check stato
+python run.py --status
+
+# Prima configurazione guidata
+python run.py --init
 ```
 
 ### Gestione Costituzione
 
 ```bash
 # Verifica operazione
-python tools/constitution.py check --path "D:/Work/Oracle/tools/mytool.py" --action "read"
+python tools/constitution.py check --path "/path/to/tool.py" --action "read"
 
 # Tool in attesa
 python tools/constitution.py pending --list
@@ -336,12 +470,16 @@ Oracle/
 ├── future_objective.md        # Obiettivi futuri
 ├── .env                       # Configurazione
 │
+├── mcp_server.py              # 🔌 MCP Server (agnostico, per qualsiasi agente)
+├── oracle_tools_cli.py         # 🖥️ CLI manuale interattiva (senza LLM)
+├── _tool_runner.py             # Wrapper compatibilità Python 3.9 per tool
+│
 ├── api/                       # API Layer
 │   ├── auth.py                #   Autenticazione
 │   ├── rate_limit.py          #   Rate limiting
 │   └── security.py            #   Middleware sicurezza
 │
-├── tools/                     # Tool personalizzati (13 attivi)
+├── tools/                     # Tool personalizzati (14 attivi)
 │   ├── oracle_protocol.py     #   Orchestratore multi-livello
 │   ├── mcts_engine.py         #   Monte Carlo Tree Search
 │   ├── interleaved_sandbox.py #   Sandbox esecuzione codice
@@ -378,6 +516,16 @@ Oracle/
 │
 └── logs/                      # Log di esecuzione
 ```
+
+---
+
+### Novità: Interfacce Agnostic
+
+| File | Descrizione |
+|------|-------------|
+| `mcp_server.py` | Server MCP — espone 14 tool via Model Context Protocol. Compatibile con Claude Code, Codex, OpenCode, Cursor, e qualsiasi agente MCP. Doppia modalità: stdio (agenti) e HTTP (Web UI interattiva) |
+| `oracle_tools_cli.py` | CLI manuale navigabile — menu interattivo stile `nmtui`, esecuzione diretta di ogni tool, help integrato |
+| `_tool_runner.py` | Wrapper di compatibilità Python 3.9 — risolve le annotazioni `str \| Path` senza modificare i tool originali |
 
 ---
 

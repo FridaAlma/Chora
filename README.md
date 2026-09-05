@@ -9,30 +9,32 @@ Modular 4-layer OSINT framework for researchers: autonomous agent with memory, k
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                   ORACLE CORE (:8100)                    │
 │            Executive Agent + Web Frontend                │
 │   50+ LLM providers · MCTS · Sandbox · Vector Memory     │
 │             RUI Framework (24 OSINT tools)               │
-└──────┬───────────────────────────────────────────────────┘
-       │
-   ┌───┴───────────────┬──────────────────────┐
-   │                   │                      │
-┌──┴──────────┐  ┌────┴──────────┐  ┌───────┴──────────┐
+└────────────────────────┬─────────────────────────────────┘
+                         │
+   ┌────────────────────┬┴────────────────────┐
+   │                    │                     │
+┌──┴──────────┐  ┌──────┴────────┐  ┌─────────┴─────────┐
 │  PENELOPE   │  │  ARCHIMEDE    │  │     EGIDA         │
 │  (:5000)    │  │  (:8001)      │  │  (integrated)     │
 │  Ingestion  │  │  Graph Reader │  │  HSD Guardrail    │
 │  + Graph    │  │  + Face Match │  │  · NER detection  │
 │             │  │               │  │  · Quarantine     │
-└─────────────┘  └───────────────┘  └────────────────────┘
+└─────────────┘  └───────────────┘  └───────────────────┘
 ```
 
-| Layer | Role | Port | Startup |
-|--------|-------|-------|-------|
-| **Oracle Core** | Executive agent, UI, OSINT tools | :8100 | Always |
-| **Penelope** | Data ingestion, knowledge graph (MariaDB/ChromaDB) | :5000 | `--with-penelope` |
-| **Archimede** | Read-only graph navigation, face recognition | :8001 | `--with-archimede` |
-| **Egida** | Integrated HSD guardrail across all layers | — | Automatic |
+| Layer           | Role                                               | Port  | Startup            |
+|-----------------|----------------------------------------------------|-------|--------------------|
+| **Oracle Core** | Executive agent, UI,                               | :8100 | Always             |
+| **Penelope**    | Data ingestion, knowledge graph (MariaDB/ChromaDB) | :5000 | `--with-penelope`  |
+| **Archimede**   | Read-only graph navigation, face recognition       | :8001 | `--with-archimede` |
+| **Egida**       | Integrated HSD guardrail across all layers         | —     | Automatic          |
+
+**HSD** stands for Hyper Sensitive Data, all the sensitive data like passwords, phone numbers, address, tokens and api keys.
 
 ---
 
@@ -161,23 +163,6 @@ python -m archimede.query find-parents --ref-dir ref_faces/
 
 ---
 
-## OSINT Tools (RUI Framework)
-
-24 OSINT tools integrated into the Oracle Core agent. Accessible via chat or API:
-
-| Category | Tool |
-|-----------|------|
-| **Web** | web_search, web_scrape, download_file |
-| **Email** | email_lookup, domain_reputation, haveibeenpwned |
-| **Network** | dns_lookup, whois, ssl_cert, port_scan |
-| **Social** | social_profile_search, username_search |
-| **Geo** | geolocate_ip, reverse_geocode |
-| **Doc** | pdf_metadata, exif_extract, doc_analyze |
-| **Crypto** | wallet_lookup, tx_lookup |
-| **Graph** | penelope_search, penelope_stats, semantic_search |
-
----
-
 ## Customization
 
 Everything is configurable via `.env`. No personal data, no hardcoding.
@@ -188,18 +173,6 @@ Everything is configurable via `.env`. No personal data, no hardcoding.
 - **Face Recognition**: InsightFace (ArcFace 512-dim, CPU)
 - **NER**: SpaCy (Italian default, configurable)
 - **Guardrail**: HSD thresholds configurable in `egida/config.py`
-
----
-
-## System Requirements
-
-| Resource | Minimum | Recommended |
-|---------|--------|-------------|
-| CPU | 4 core | 8+ core |
-| RAM | 8 GB | 16+ GB |
-| Disk | 2 GB (code) + data space | SSD |
-| GPU | Not required | Optional (for face rec) |
-| Network | Internet for LLM APIs | — |
 
 ---
 

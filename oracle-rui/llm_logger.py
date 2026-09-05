@@ -3,6 +3,8 @@ Stub per llm_logger — logging delle chiamate LLM.
 Oracle lo usa per tracciare il contesto delle chiamate.
 """
 
+from __future__ import annotations
+
 import logging
 
 logger = logging.getLogger("oracle.llm_logger")

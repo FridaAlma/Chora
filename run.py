@@ -103,6 +103,32 @@ def start_penelope() -> subprocess.Popen | None:
 
 def start_archimede() -> subprocess.Popen | None:
     """Start Archimede API (:8001) as a subprocess."""
+
+
+def start_mcp() -> subprocess.Popen | None:
+    """Start the MCP server in HTTP mode (:8101)."""
+    script = _ORACLE_ROOT / "mcp_server.py"
+    if not script.exists():
+        logger.warning("[WARN] MCP server not found: %s", script)
+        return None
+
+    log_file = _ROOT / "logs" / "mcp.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Starting Oracle MCP Server on :8101...")
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, str(script), "--http", "--port", "8101"],
+            cwd=str(_ORACLE_ROOT),
+            stdout=open(log_file, "w", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+        logger.info("[OK] MCP Server starting on http://localhost:8101")
+        logger.info("[INFO] MCP tools:  http://localhost:8101/tools")
+        return proc
+    except Exception as e:
+        logger.error("[ERR] Error starting MCP server: %s", e)
+        return None
     script = _ARCHIMEDE_ROOT / "archimede" / "api.py"
     if not script.exists():
         logger.warning("[WARN] Archimede API not found: %s", script)
@@ -136,13 +162,17 @@ def print_banner(args: argparse.Namespace):
     print("  |         O R A C L E   R U I   E d i t i o n      |")
     print("  |     Research * Union * Intelligence               |")
     print("  +--------------------------------------------------+")
-    print(f"  |  Port:             {args.port:<31} |")
     print(f"  |  Oracle Core:      http://localhost:{args.port:<5}               |")
+    print(f"  |  MCP Server:       http://localhost:8101 (tools) |")
     print(f"  |  Penelope:         {'active on :5000' if args.with_penelope else 'not started':<31} |")
     print(f"  |  Archimede:        {'active on :8001' if args.with_archimede else 'not started':<31} |")
     print(f"  |  Egida:            always active (HSD guardrail)  |")
     print("  +--------------------------------------------------+")
     print()
+    print("  Alternative entry points:")
+    print(f"  • Manual CLI:   python oracle-rui/oracle_tools_cli.py")
+    print(f"  • MCP stdio:    python oracle-rui/mcp_server.py")
+    print(f"  • MCP web UI:   http://localhost:8101")
 
 
 def check_status():
@@ -196,12 +226,26 @@ def check_status():
     except Exception:
         line("Archimede", False, ":8001 — NOT running")
 
+    # MCP :8101
+    try:
+        r = httpx.get("http://127.0.0.1:8101/health", timeout=2.0)
+        if r.status_code == 200:
+            data = r.json()
+            line("MCP Server", True, f":8101 ({data.get('tools', '?')} tools)")
+        else:
+            line("MCP Server", False, f":8101 status={r.status_code}")
+    except Exception:
+        line("MCP Server", False, ":8101 — NOT running")
+
     print(sep)
     print()
     print("Tips:")
     print("  * Basic startup:              python run.py")
-    print("  * With Penelope:              python run.py --with-penelope")
+    print("  * With MCP:                   python run.py --with-mcp")
     print("  * With everything:            python run.py --all")
+    print("  * Manual CLI:                 python oracle-rui/oracle_tools_cli.py")
+    print("  * MCP Web UI:                 http://localhost:8101")
+    print("  * MCP for Claude Code/Codex:  python oracle-rui/mcp_server.py")
     print("  * Detailed status:            curl http://localhost:8100/api/health")
     print()
 
@@ -268,6 +312,8 @@ def main():
                         help="Also start Penelope API (:5000)")
     parser.add_argument("--with-archimede", action="store_true",
                         help="Also start Archimede API (:8001)")
+    parser.add_argument("--with-mcp", action="store_true",
+                        help="Also start MCP Server (:8101)")
     parser.add_argument("--all", action="store_true",
                         help="Start ALL components")
     parser.add_argument("--status", "--check", action="store_true",
@@ -290,9 +336,11 @@ def main():
     if args.all:
         args.with_penelope = True
         args.with_archimede = True
+        args.with_mcp = True
 
     penelope_proc: subprocess.Popen | None = None
     archimede_proc: subprocess.Popen | None = None
+    mcp_proc: subprocess.Popen | None = None
 
     # ── 1. Penelope (optional) ──────────────────────────────
     if args.with_penelope:
@@ -302,22 +350,61 @@ def main():
     if args.with_archimede:
         archimede_proc = start_archimede()
 
-    # ── 3. Start Oracle Core ─────────────────────────────────
+    # ── 3. MCP Server (optional) ─────────────────────────────
+    if args.with_mcp:
+        mcp_proc = start_mcp()
+
+    # ── 4. Start Oracle Core ─────────────────────────────────
     print_banner(args)
 
+    # Only start Oracle Core if agno is available or we're not explicitly
+    # running in MCP-only mode (which doesn't need agno at all)
+    _start_oracle_core = True
+    _agno_available = False
+
     try:
-        import os
-        os.environ["ORACLE_PORT"] = str(args.port)
-        os.environ["ORACLE_HOST"] = args.host
+        import agno  # type: ignore
+        _agno_available = True
+    except ImportError:
+        _agno_available = False
+        if args.with_mcp:
+            # MCP-only mode: Oracle Core not needed, just keep MCP running
+            _start_oracle_core = False
+            logger.info(
+                "agno not installed — Oracle Core not available. "
+                "MCP Server is running on :8101. "
+                "Install with: pip install -r oracle-rui/requirements-core.txt"
+            )
 
-        from coding_agent import app
-        import uvicorn
+    if _start_oracle_core and not _agno_available:
+        logger.error(
+            "Cannot start Oracle Core: module 'agno' not installed.\n"
+            "  Install with: pip install -r oracle-rui/requirements-core.txt\n"
+            "  Or use MCP-only mode: python run.py --with-mcp (no agno needed)"
+        )
+        _start_oracle_core = False
 
-        uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    try:
+        if _start_oracle_core:
+            import os
+            os.environ["ORACLE_PORT"] = str(args.port)
+            os.environ["ORACLE_HOST"] = args.host
+
+            from coding_agent import app
+            import uvicorn
+
+            uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+        else:
+            # Keep the process alive (e.g., while MCP server runs)
+            if mcp_proc and mcp_proc.poll() is None:
+                logger.info("Oracle Core not started. MCP Server running. Press Ctrl+C to stop.")
+                # Wait for subprocesses to finish
+                import time as _time
+                while any(p and p.poll() is None for p in [penelope_proc, archimede_proc, mcp_proc]):
+                    _time.sleep(1)
     except KeyboardInterrupt:
         print("\n[Oracle RUI] Shutting down...")
     finally:
-        # Cleanup Penelope
         if penelope_proc:
             logger.info("Stopping Penelope (PID: %d)...", penelope_proc.pid)
             if sys.platform == "win32":
@@ -342,6 +429,19 @@ def main():
             except subprocess.TimeoutExpired:
                 archimede_proc.kill()
             logger.info("Archimede stopped.")
+
+        # Cleanup MCP Server
+        if mcp_proc:
+            logger.info("Stopping MCP Server (PID: %d)...", mcp_proc.pid)
+            if sys.platform == "win32":
+                mcp_proc.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                mcp_proc.terminate()
+            try:
+                mcp_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                mcp_proc.kill()
+            logger.info("MCP Server stopped.")
 
     print("[Oracle RUI] Goodbye.")
 
