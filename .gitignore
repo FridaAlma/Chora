@@ -35,3 +35,4 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+oracle-rui/data/*.db
