@@ -7,13 +7,13 @@ One command to start the entire Chora ecosystem:
   python run.py
 
 Components:
-  * Oracle Core (executive agent + frontend)  — :8100
+  * CHORA Core (executive agent + frontend) — :8100
   * Penelope (knowledge graph)                — :5000  (optional)
   * Archimede (graph data engine)             — :8001  (optional)
   * Egida (HSD guardrail)                     — integrated across all layers
 
 Usage:
-    python run.py                              # Start Oracle Core (default)
+    python run.py                              # Start CHORA Core (default)
     python run.py --with-penelope              # Also start Penelope (:5000)
     python run.py --with-archimede             # Also start Archimede (:8001)
     python run.py --all                        # Start EVERYTHING
@@ -55,7 +55,7 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("oracle-rui")
+logger = logging.getLogger("chora")
 
 
 def wait_for_server(url: str, timeout: int = 15, interval: float = 0.5) -> bool:
@@ -159,8 +159,8 @@ def print_banner(args: argparse.Namespace):
     """Print the startup banner."""
     print()
     print("  +--------------------------------------------------+")
-    print("  |         O R A C L E   R U I   E d i t i o n      |")
-    print("  |     Research * Union * Intelligence               |")
+    print("  |                   C H O R A                       |")
+    print("  |     Semantic Archive * Knowledge Graph            |")
     print("  +--------------------------------------------------+")
     print(f"  |  CHORA Core:       http://localhost:{args.port:<5}               |")
     print(f"  |  MCP Server:       http://localhost:8101 (MCP)   |")
@@ -172,7 +172,7 @@ def print_banner(args: argparse.Namespace):
     print("  Alternative entry points:")
     print(f"  • Manual CLI:   python oracle-rui/oracle_tools_cli.py")
     print(f"  • MCP stdio:    python oracle-rui/mcp_server.py")
-    print(f"  • MCP web UI:   http://localhost:8101")
+    print(f"  • CHORA UI:     http://localhost:{args.port}")
 
 
 def check_status():
@@ -244,7 +244,7 @@ def check_status():
     print("  * With MCP:                   python run.py --with-mcp")
     print("  * With everything:            python run.py --all")
     print("  * Manual CLI:                 python oracle-rui/oracle_tools_cli.py")
-    print("  * MCP Web UI:                 http://localhost:8101")
+    print("  * CHORA UI:                   http://localhost:8100")
     print("  * MCP for Claude Code/Codex:  python oracle-rui/mcp_server.py")
     print("  * Detailed status:            curl http://localhost:8100/api/health")
     print()
@@ -305,9 +305,9 @@ def main():
         description="Chora — Unified startup"
     )
     parser.add_argument("--port", type=int, default=8100,
-                        help="Oracle Core port (default: 8100)")
+                        help="CHORA Core port (default: 8100)")
     parser.add_argument("--host", type=str, default="0.0.0.0",
-                        help="Oracle Core host")
+                        help="CHORA Core host")
     parser.add_argument("--with-penelope", action="store_true",
                         help="Also start Penelope API (:5000)")
     parser.add_argument("--with-archimede", action="store_true",
@@ -354,10 +354,10 @@ def main():
     if args.with_mcp:
         mcp_proc = start_mcp()
 
-    # ── 4. Start Oracle Core ─────────────────────────────────
+    # ── 4. Start CHORA Core ─────────────────────────────────
     print_banner(args)
 
-    # Only start Oracle Core if agno is available or we're not explicitly
+    # Only start CHORA Core if agno is available or we're not explicitly
     # running in MCP-only mode (which doesn't need agno at all)
     _start_oracle_core = True
     _agno_available = False
@@ -368,17 +368,17 @@ def main():
     except ImportError:
         _agno_available = False
         if args.with_mcp:
-            # MCP-only mode: Oracle Core not needed, just keep MCP running
+            # MCP-only mode: CHORA Core not needed, just keep MCP running
             _start_oracle_core = False
             logger.info(
-                "agno not installed — Oracle Core not available. "
+                "agno not installed — CHORA Core not available. "
                 "MCP Server is running on :8101. "
                 "Install with: pip install -r oracle-rui/requirements-core.txt"
             )
 
     if _start_oracle_core and not _agno_available:
         logger.error(
-            "Cannot start Oracle Core: module 'agno' not installed.\n"
+            "Cannot start CHORA Core: module 'agno' not installed.\n"
             "  Install with: pip install -r oracle-rui/requirements-core.txt\n"
             "  Or use MCP-only mode: python run.py --with-mcp (no agno needed)"
         )
@@ -397,7 +397,7 @@ def main():
         else:
             # Keep the process alive (e.g., while MCP server runs)
             if mcp_proc and mcp_proc.poll() is None:
-                logger.info("Oracle Core not started. MCP Server running. Press Ctrl+C to stop.")
+                logger.info("CHORA Core not started. MCP Server running. Press Ctrl+C to stop.")
                 # Wait for subprocesses to finish
                 import time as _time
                 while any(p and p.poll() is None for p in [penelope_proc, archimede_proc, mcp_proc]):

@@ -410,7 +410,7 @@ class OracleLoop:
         )
 
     def _exec_osint(self, query: str, context: str = "") -> DomainResult:
-        """Esegue una richiesta sul dominio OSINT (Oracle RUI)."""
+        """Esegue una richiesta sul dominio OSINT (CHORA)."""
         t0 = time.time()
         proto = self._get_oracle_protocol()
         if proto:
