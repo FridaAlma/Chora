@@ -1,6 +1,4 @@
-# Oracle RUI Edition
-
-**Research · Union · Intelligence**
+# CHORA
 
 Modular 4-layer OSINT framework for researchers: autonomous agent with memory, knowledge graph, identity resolution, and ethical guardrails.
 
@@ -10,7 +8,7 @@ Modular 4-layer OSINT framework for researchers: autonomous agent with memory, k
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                   ORACLE CORE (:8100)                    │
+│                   CHORA CORE (:8100)                    │
 │            Executive Agent + Web Frontend                │
 │   50+ LLM providers · MCTS · Sandbox · Vector Memory     │
 │             RUI Framework (24 OSINT tools)               │
