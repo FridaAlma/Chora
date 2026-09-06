@@ -218,7 +218,7 @@ from agno.os import AgentOS # type: ignore
 from model_factory import create_model, get_provider_info
 from llm_logger import set_caller_tag, clear_caller_tag
 
-from fastapi import Request, FastAPI, Depends, HTTPException, status
+from fastapi import Request, FastAPI, Depends, HTTPException, status, APIRouter
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -487,6 +487,42 @@ agent_os = AgentOS(
 )
 
 app = agent_os.get_app()
+
+# ── Penelope API Proxy Route ───────────────────────────────────────
+# Proxies /penelope/api/* to Penelope Flask on :5000 (no CORS issues)
+_penelope_client = None  # type: Optional[httpx.AsyncClient]
+
+async def _get_penelope_client() -> httpx.AsyncClient:
+    global _penelope_client
+    if _penelope_client is None:
+        _penelope_client = httpx.AsyncClient(timeout=30.0, base_url="http://localhost:5000")
+    return _penelope_client
+
+_penelope_router = APIRouter(prefix="/penelope")
+
+@_penelope_router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def _penelope_proxy(path: str, request: Request):
+    qs = str(request.url).split("?", 1)[1] if "?" in str(request.url) else ""
+    target = "/" + path
+    if qs:
+        target += "?" + qs
+    body = await request.body() if request.method in ("POST", "PUT") else None
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length", "transfer-encoding")}
+    try:
+        client = await _get_penelope_client()
+        resp = await client.request(request.method, target, headers=headers, content=body)
+        from fastapi.responses import Response
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            media_type=resp.headers.get("content-type", "application/json"),
+            headers={"access-control-allow-origin": "*"},
+        )
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": f"Penelope proxy error: {str(e)}"}, status_code=502)
+
+app.include_router(_penelope_router)
 
 # ── Apply Security Middleware ────────────────────────────────────────
 if API_SECURITY_AVAILABLE:
@@ -1396,13 +1432,12 @@ from pathlib import Path as _Path
 _chora_index_path = _Path(__file__).resolve().parent.parent / "index.html"
 
 class _ChoraASGIWrapper:
-    """ASGI wrapper: serves index.html at GET /, proxies /penelope/* to :5000."""
+    """ASGI wrapper: serves index.html at GET /, delegates everything else."""
     def __init__(self, inner):
         self.inner = inner
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["method"] == "GET":
             path = scope.get("path", "").rstrip("/") or "/"
-            # Serve CHORA UI at root
             if path in ("/", "/ui"):
                 from fastapi.responses import FileResponse, JSONResponse
                 idx = _chora_index_path
@@ -1410,53 +1445,6 @@ class _ChoraASGIWrapper:
                        JSONResponse({"error": "index.html not found"}, status_code=404)
                 await resp(scope, receive, send)
                 return
-        # Proxy /penelope/* requests to localhost:5000
-        if scope["type"] == "http" and scope["path"].startswith("/penelope"):
-            import httpx
-            target_path = scope["path"][len("/penelope"):] or "/"
-            method = scope["method"]
-            # Read request body if any
-            body = b""
-            if method in ("POST", "PUT", "PATCH"):
-                more_body = True
-                while more_body:
-                    message = await receive()
-                    body += message.get("body", b"")
-                    more_body = message.get("more_body", False)
-            # Build headers
-            headers = {}
-            for k, v in scope.get("headers", []):
-                key = k.decode("latin-1").lower()
-                if key not in ("host", "content-length", "transfer-encoding"):
-                    headers[key] = v.decode("latin-1")
-            try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.request(
-                        method, "http://localhost:5000" + target_path,
-                        headers=headers,
-                        content=body,
-                        params=scope.get("query_string", b"").decode() or None,
-                    )
-                # Send response back to browser
-                resp_headers = [
-                    (b"content-type", resp.headers.get("content-type", "application/json").encode()),
-                    (b"content-length", str(len(resp.content)).encode()),
-                    (b"access-control-allow-origin", b"*"),
-                ]
-                await send({
-                    "type": "http.response.start",
-                    "status": resp.status_code,
-                    "headers": resp_headers,
-                })
-                await send({
-                    "type": "http.response.body",
-                    "body": resp.content,
-                })
-            except Exception as e:
-                from fastapi.responses import JSONResponse
-                err = JSONResponse({"error": str(e)}, status_code=502)
-                await err(scope, receive, send)
-            return
         await self.inner(scope, receive, send)
 
 app = _ChoraASGIWrapper(app)  # type: ignore[assignment]
