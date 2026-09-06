@@ -1062,10 +1062,6 @@ async def list_sessions(
         return JSONResponse({"sessions": [], "error": str(e)})
 
 
-# ─── Serve il file index.html (CHORA UI) alla radice ────────────
-CHAT_HTML_PATH = ORACLE_ROOT_DIR / "index.html"
-
-
 # ── Constitution API ──────────────────────────────────────────────
 _CONSTITUTION_ENFORCER = None
 
@@ -1255,14 +1251,6 @@ async def confirm_action(
     enforcer = _get_constitution()
     result = enforcer.confirmation.confirm(conf_id)
     return JSONResponse(result)
-
-
-@app.get("/")
-@app.get("/ui")
-async def serve_chat_ui():
-    if CHAT_HTML_PATH.exists():
-        return FileResponse(str(CHAT_HTML_PATH))
-    return JSONResponse({"error": "index.html not found"}, status_code=404)
 
 
 # ════════════════════════════════════════════════════════════════
