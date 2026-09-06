@@ -51,7 +51,20 @@ def _get_cursor():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return jsonify({
+        "service": "Penelope Graph API",
+        "docs": "Use the CHORA UI at http://localhost:8100",
+        "endpoints": {
+            "stats": "/api/stats",
+            "nodes": "/api/nodes",
+            "graph": "/api/graph",
+            "search": "/api/search",
+            "faces": "/api/faces",
+            "projects": "/api/projects",
+            "events": "/api/events",
+            "timeline": "/api/events/timeline",
+        }
+    })
 
 
 @app.route("/static/<path:path>")

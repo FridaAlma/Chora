@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Oracle MCP Server
+CHORA MCP Server
 =================
 Model Context Protocol (MCP) server that exposes all 13 Oracle tools
 as standard MCP tools. Compatible with any MCP client:
@@ -897,7 +897,7 @@ def run_http_server(host: str = "0.0.0.0", port: int = 8100):
             elif path == "/openapi.json":
                 self._json_response(200, {
                     "openapi": "3.0.0",
-                    "info": {"title": "Oracle MCP", "version": "1.0.0"},
+                    "info": {"title": "CHORA MCP", "version": "1.0.0"},
                     "paths": {
                         "/api/mcp": {"post": {"summary": "MCP JSON-RPC endpoint"}},
                         "/tools": {"get": {"summary": "List MCP tools"}},
@@ -907,7 +907,7 @@ def run_http_server(host: str = "0.0.0.0", port: int = 8100):
                 return
 
             elif path == "" or path == "/":
-                self._serve_web_ui()
+                self._serve_info_page()
                 return
 
             else:
@@ -937,263 +937,58 @@ def run_http_server(host: str = "0.0.0.0", port: int = 8100):
             self.end_headers()
             self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
-        def _serve_web_ui(self):
-            """Serve the interactive web UI."""
-            tools = get_mcp_tools()
-
-            cards_html = ""
-            for t in tools:
-                name = t["name"]
-                desc = t.get("description", "")
-                props = t.get("inputSchema", {}).get("properties", {})
-                required = t.get("inputSchema", {}).get("required", [])
-
-                params_html = ""
-                for pname, pdef in props.items():
-                    ptype = pdef.get("type", "string")
-                    pdesc = pdef.get("description", "")
-                    default = pdef.get("default")
-                    enum = pdef.get("enum")
-                    is_required = pname in required
-
-                    req_mark = ' <span class="req">*</span>' if is_required else ""
-                    extra = ""
-                    if enum:
-                        options = "".join(f'<option value="{e}">{e}</option>' for e in enum)
-                        extra = f"""
-                        <select name="{pname}" id="in-{name}-{pname}">
-                            <option value="">-- seleziona --</option>
-                            {options}
-                        </select>"""
-                    elif ptype == "boolean":
-                        extra = f"""
-                        <label class="toggle">
-                            <input type="checkbox" name="{pname}" id="in-{name}-{pname}"
-                                   {"checked" if default else ""}>
-                            <span class="slider"></span>
-                        </label>"""
-                    else:
-                        placeholder = f"default: {default}" if default is not None else ptype
-                        extra = f"""<input type="{'number' if ptype in ('integer','number') else 'text'}"
-                                 name="{pname}" id="in-{name}-{pname}"
-                                 placeholder="{placeholder}">"""
-
-                    params_html += f"""
-                    <div class="param">
-                        <label for="in-{name}-{pname}">
-                            <code>{pname}</code> ({ptype}){req_mark}
-                        </label>
-                        <div class="param-desc">{pdesc}</div>
-                        {extra}
-                    </div>"""
-
-                cards_html += f"""
-                <div class="card" id="card-{name}">
-                    <div class="card-header" onclick="toggle('{name}')">
-                        <span class="card-name">{name}</span>
-                        <span class="card-desc">{desc[:100]}{'…' if len(desc)>100 else ''}</span>
-                    </div>
-                    <div class="card-body" id="body-{name}">
-                        <p class="full-desc">{desc}</p>
-                        <form id="form-{name}" onsubmit="return callTool('{name}')">
-                            {params_html}
-                            <button type="submit" class="btn-run">▶ Run</button>
-                            <button type="button" class="btn-copy" onclick="copyExample('{name}')">📋 Copy CLI</button>
-                        </form>
-                        <pre class="output" id="out-{name}"></pre>
-                    </div>
-                </div>"""
-
+        def _serve_info_page(self):
+            """Serve a minimal info page redirecting to the CHORA UI."""
+            tool_count = len(get_mcp_tools())
             html = f"""<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oracle MCP — Tool Browser</title>
+<title>CHORA — MCP Server</title>
 <style>
     * {{ margin:0; padding:0; box-sizing:border-box; }}
     body {{
-        background: #0d1117;
-        color: #c9d1d9;
-        font-family: -apple-system, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
-        padding: 20px;
-        max-width: 960px;
-        margin: 0 auto;
-    }}
-    h1 {{ color: #58a6ff; font-size: 26px; margin-bottom: 4px; }}
-    .subtitle {{ color: #8b949e; margin-bottom: 24px; font-size: 14px; }}
-    .badge {{
-        display: inline-block; background: #1f6feb22; color: #58a6ff;
-        padding: 2px 10px; border-radius: 12px; font-size: 12px; margin-left: 8px;
+        background: #f6f6f3; font-family: Inter, ui-sans-serif, -apple-system, sans-serif;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 100vh; color: #171816; padding: 24px;
     }}
     .card {{
-        background: #161b22; border: 1px solid #30363d;
-        border-radius: 8px; margin-bottom: 10px; overflow: hidden;
+        background: #fbfbf9; border: 1px solid #deded9; border-radius: 14px;
+        padding: 40px 48px; max-width: 520px; width: 100%; text-align: center;
+        box-shadow: 0 18px 50px rgba(20,22,20,.07);
     }}
-    .card-header {{
-        padding: 12px 16px; cursor: pointer; display: flex;
-        justify-content: space-between; align-items: center;
-        transition: background 0.15s;
+    h1 {{ font-size: 24px; font-weight: 620; letter-spacing: -.03em; margin-bottom: 8px; }}
+    p {{ color: #73756f; font-size: 14px; line-height: 1.6; margin-bottom: 24px; }}
+    .badge {{
+        display: inline-block; background: #e2e9e6; color: #526b63;
+        padding: 4px 12px; border-radius: 8px; font-size: 12px; font-weight: 550;
+        margin-bottom: 20px;
     }}
-    .card-header:hover {{ background: #1c2128; }}
-    .card-name {{ font-weight: 600; color: #58a6ff; font-family: 'SF Mono', 'Fira Code', monospace; }}
-    .card-desc {{ color: #8b949e; font-size: 13px; max-width: 60%; text-align: right; }}
-    .card-body {{ padding: 16px; border-top: 1px solid #30363d; display: none; }}
-    .full-desc {{ color: #adb5bd; margin-bottom: 14px; font-size: 13px; }}
-    .param {{
-        margin-bottom: 10px; padding: 8px 10px; background: #0d1117;
-        border-radius: 6px; border: 1px solid #21262d;
+    a {{
+        display: inline-block; background: #526b63; color: white; text-decoration: none;
+        padding: 10px 24px; border-radius: 9px; font-size: 13px; font-weight: 550;
+        transition: background .2s ease;
     }}
-    .param label {{ display: block; margin-bottom: 4px; }}
-    .param code {{ color: #ff7b72; font-family: 'SF Mono', monospace; font-size: 13px; }}
-    .req {{ color: #f85149; font-weight: bold; }}
-    .param-desc {{ color: #6e7681; font-size: 12px; margin-bottom: 4px; }}
-    input[type="text"], input[type="number"], select {{
-        width: 100%; background: #0d1117; border: 1px solid #30363d;
-        border-radius: 4px; color: #c9d1d9; padding: 6px 10px;
-        font-size: 13px; font-family: 'SF Mono', monospace;
-    }}
-    input:focus, select:focus {{ outline: none; border-color: #58a6ff; }}
-    .toggle {{ position: relative; display: inline-block; width: 44px; height: 24px; }}
-    .toggle input {{ opacity: 0; width: 0; height: 0; }}
-    .slider {{
-        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-        background-color: #30363d; transition: .3s; border-radius: 24px;
-    }}
-    .slider::before {{
-        position: absolute; content: ""; height: 18px; width: 18px;
-        left: 3px; bottom: 3px; background-color: #c9d1d9; transition: .3s; border-radius: 50%;
-    }}
-    .toggle input:checked + .slider {{ background-color: #238636; }}
-    .toggle input:checked + .slider::before {{ transform: translateX(20px); }}
-    .btn-run {{
-        background: #238636; color: #fff; border: none; border-radius: 6px;
-        padding: 8px 20px; font-size: 14px; cursor: pointer; margin-top: 8px;
-    }}
-    .btn-run:hover {{ background: #2ea043; }}
-    .btn-copy {{
-        background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-        border-radius: 6px; padding: 8px 14px; font-size: 13px;
-        cursor: pointer; margin-left: 8px;
-    }}
-    .btn-copy:hover {{ background: #30363d; }}
-    .output {{
-        background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
-        padding: 12px; margin-top: 12px; font-family: 'SF Mono', monospace;
-        font-size: 12px; white-space: pre-wrap; max-height: 400px;
-        overflow: auto; display: none;
-    }}
-    .output.show {{ display: block; }}
-    .output.error {{ border-color: #f85149; }}
-    .output .loading {{ color: #8b949e; }}
-    #search {{ width: 100%; padding: 8px 12px; margin-bottom: 16px;
-               background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
-               color: #c9d1d9; font-size: 14px; }}
-    #search:focus {{ border-color: #58a6ff; outline: none; }}
-    .clear-btn {{ background: none; border: 1px solid #30363d; color: #8b949e;
-                  padding: 2px 8px; border-radius: 4px; cursor: pointer; float: right;
-                  font-size: 12px; }}
-    .clear-btn:hover {{ color: #c9d1d9; border-color: #58a6ff; }}
+    a:hover {{ background: #3f5650; }}
+    .links {{ margin-top: 20px; font-size: 12px; }}
+    .links a {{ background: none; color: #526b63; padding: 4px 8px; text-decoration: underline; }}
 </style>
 </head>
 <body>
-    <h1>🔮 Oracle MCP Tools</h1>
-    <div class="subtitle">
-        {len(tools)} tools &mdash; <strong>Manuale:</strong> clicca un tool per espanderlo,
-        compila i parametri e premi <strong>▶ Run</strong>
-        <span class="badge">MCP v{MCP_PROTOCOL_VERSION}</span>
+    <div class="card">
+        <div class="badge">MCP Server · {tool_count} tools</div>
+        <h1>CHORA MCP</h1>
+        <p>Questo è il server MCP per coding agents (Claude Code, Codex, Cursor).<br>Usa la <strong>CHORA UI</strong> per l’interfaccia grafica.</p>
+        <a href="http://localhost:8100">→ Vai alla CHORA UI (:8100)</a>
+        <div class="links">
+            <a href="/health">Health</a> ·
+            <a href="/tools">Tools</a> ·
+            <a href="/api/mcp">MCP API</a>
+        </div>
     </div>
-
-    <input type="text" id="search" placeholder="Cerca tool... (filtra per nome)" oninput="filterTools()">
-
-    <div id="tools-container">{cards_html}</div>
-
-    <script>
-    function toggle(name) {{
-        const body = document.getElementById('body-' + name);
-        const isOpen = body.style.display === 'block';
-        body.style.display = isOpen ? 'none' : 'block';
-    }}
-
-    function filterTools() {{
-        const q = document.getElementById('search').value.toLowerCase();
-        document.querySelectorAll('.card').forEach(card => {{
-            const name = card.querySelector('.card-name').textContent.toLowerCase();
-            const desc = card.querySelector('.card-desc').textContent.toLowerCase();
-            card.style.display = (name.includes(q) || desc.includes(q)) ? '' : 'none';
-        }});
-    }}
-
-    function getArgs(name) {{
-        const form = document.getElementById('form-' + name);
-        const formData = new FormData(form);
-        const args = {{}};
-        for (const [key, value] of formData.entries()) {{
-            const el = document.getElementById('in-' + name + '-' + key);
-            if (el?.type === 'checkbox') {{
-                args[key] = el.checked;
-            }} else if (value !== '' && value !== null) {{
-                const num = Number(value);
-                args[key] = isNaN(num) ? value : num;
-            }}
-        }}
-        return args;
-    }}
-
-    function callTool(name) {{
-        const args = getArgs(name);
-        const out = document.getElementById('out-' + name);
-        out.textContent = '⏳ Esecuzione in corso...';
-        out.className = 'output show';
-
-        fetch('/api/mcp', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{
-                jsonrpc: '2.0', id: Date.now(),
-                method: 'tools/call',
-                params: {{ name: name, arguments: args }}
-            }})
-        }})
-        .then(r => r.json())
-        .then(data => {{
-            const result = data.result || {{}};
-            const isErr = result.isError;
-            const text = (result.content || []).map(c => c.text || '').join('\\n');
-            out.textContent = text || '(risposta vuota)';
-            out.className = 'output show' + (isErr ? ' error' : '');
-        }})
-        .catch(err => {{
-            out.textContent = 'Errore: ' + err.message;
-            out.className = 'output show error';
-        }});
-
-        return false;
-    }}
-
-    function copyExample(name) {{
-        const args = getArgs(name);
-        let cmd = 'python tools/' + name + '.py';
-        if (args.command) cmd += ' ' + args.command;
-        for (const [k,v] of Object.entries(args)) {{
-            if (k === 'command') continue;
-            const flag = '--' + k.replace(/_/g, '-');
-            if (typeof v === 'boolean') {{
-                if (v) cmd += ' ' + flag;
-            }} else {{
-                cmd += ' ' + flag + ' ' + (typeof v === 'string' ? ('"' + v + '"') : v);
-            }}
-        }}
-        navigator.clipboard.writeText(cmd).then(() => {{
-            const btn = event.target;
-            btn.textContent = '✅ Copiato!';
-            setTimeout(() => btn.textContent = '📋 Copy CLI', 1500);
-        }});
-    }}
-    </script>
 </body>
 </html>"""
-
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -1201,9 +996,10 @@ def run_http_server(host: str = "0.0.0.0", port: int = 8100):
             self.wfile.write(html.encode("utf-8"))
 
     server = HTTPServer((host, port), MCPHandler)
-    print(f"\n  🔮 Oracle MCP Server (HTTP mode)")
+    print(f"\n  🔮 CHORA MCP Server (HTTP mode)")
     print(f"  ──────────────────────────────────────")
-    print(f"  Web UI:      http://localhost:{port}")
+    print(f"  CHORA UI:   http://localhost:8100
+  MCP API:    http://localhost:{port}")
     print(f"  MCP API:     POST http://localhost:{port}/api/mcp")
     print(f"  Tools list:  GET  http://localhost:{port}/tools")
     print(f"  Health:      GET  http://localhost:{port}/health")
@@ -1224,7 +1020,7 @@ def run_http_server(host: str = "0.0.0.0", port: int = 8100):
 def main():
     parser = argparse.ArgumentParser(
         prog="oracle-mcp",
-        description="Oracle MCP Server — Espone tutti i tool Oracle via Model Context Protocol",
+        description="CHORA MCP Server — Espone tutti i tool via Model Context Protocol",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Modalità d'uso:
@@ -1248,7 +1044,7 @@ Modalità d'uso:
 
     if args.list:
         tools = get_mcp_tools()
-        print(f"\n  Oracle MCP — {len(tools)} tools disponibili:\n")
+        print(f"\n  CHORA MCP — {len(tools)} tools disponibili:\n")
         for t in tools:
             print(f"  🔧 {t['name']}")
             desc = t.get("description", "")

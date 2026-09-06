@@ -162,8 +162,8 @@ def print_banner(args: argparse.Namespace):
     print("  |         O R A C L E   R U I   E d i t i o n      |")
     print("  |     Research * Union * Intelligence               |")
     print("  +--------------------------------------------------+")
-    print(f"  |  Oracle Core:      http://localhost:{args.port:<5}               |")
-    print(f"  |  MCP Server:       http://localhost:8101 (tools) |")
+    print(f"  |  CHORA Core:       http://localhost:{args.port:<5}               |")
+    print(f"  |  MCP Server:       http://localhost:8101 (MCP)   |")
     print(f"  |  Penelope:         {'active on :5000' if args.with_penelope else 'not started':<31} |")
     print(f"  |  Archimede:        {'active on :8001' if args.with_archimede else 'not started':<31} |")
     print(f"  |  Egida:            always active (HSD guardrail)  |")
@@ -403,7 +403,7 @@ def main():
                 while any(p and p.poll() is None for p in [penelope_proc, archimede_proc, mcp_proc]):
                     _time.sleep(1)
     except KeyboardInterrupt:
-        print("\n[Oracle RUI] Shutting down...")
+        print("\n[Chora] Shutting down...")
     finally:
         if penelope_proc:
             logger.info("Stopping Penelope (PID: %d)...", penelope_proc.pid)
@@ -443,7 +443,7 @@ def main():
                 mcp_proc.kill()
             logger.info("MCP Server stopped.")
 
-    print("[Oracle RUI] Goodbye.")
+    print("[Chora] Goodbye.")
 
 
 if __name__ == "__main__":

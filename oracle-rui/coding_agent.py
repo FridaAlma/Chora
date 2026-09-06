@@ -404,7 +404,7 @@ _check_api_connectivity()
 def _build_initial_info() -> str:
     """'Initial info' block with real paths, injected at runtime."""
     main_files = ("coding_agent.py, cli.py, system_prompt.md, .env, .env.example, "
-                  "coding_agent.db, chat.html, oracle.bat, CONSTITUTION.md")
+                  "coding_agent.db, index.html, oracle.bat, CONSTITUTION.md")
     return (f"\n## 13. Initial info\n\n"
             f"Workspace root: {ORACLE_ROOT_DIR}. Main files: {main_files}.\n"
             f"Working area (tools): {WORK_ROOT}.")
@@ -1051,8 +1051,8 @@ async def list_sessions(
         return JSONResponse({"sessions": [], "error": str(e)})
 
 
-# ─── Serve il file chat.html alla radice ────────────────────────
-CHAT_HTML_PATH = BASE_DIR / "chat.html"
+# ─── Serve il file index.html (CHORA UI) alla radice ────────────
+CHAT_HTML_PATH = ORACLE_ROOT_DIR / "index.html"
 
 
 # ── Constitution API ──────────────────────────────────────────────
@@ -1251,7 +1251,7 @@ async def confirm_action(
 async def serve_chat_ui():
     if CHAT_HTML_PATH.exists():
         return FileResponse(str(CHAT_HTML_PATH))
-    return JSONResponse({"error": "chat.html not found"}, status_code=404)
+    return JSONResponse({"error": "index.html not found"}, status_code=404)
 
 
 # ════════════════════════════════════════════════════════════════

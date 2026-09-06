@@ -29,6 +29,7 @@ logs/
 doc/
 
 *.db
+*.old
 
 # IDE
 .vscode/

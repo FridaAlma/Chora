@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CHORA — Semantic Archive</title>
+  <style>
+    :root {
+      --bg: #f6f6f3;
+      --surface: #fbfbf9;
+      --surface-2: #eeeeeb;
+      --border: #deded9;
+      --border-strong: #c9c9c2;
+      --text: #171816;
+      --muted: #73756f;
+      --accent: #526b63;
+      --accent-soft: #e2e9e6;
+      --shadow: 0 18px 50px rgba(20, 22, 20, .07);
+      --radius: 14px;
+      --sidebar: 238px;
+      --ease: cubic-bezier(.22, 1, .36, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                   "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: var(--sidebar) 1fr;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: var(--sidebar);
+      padding: 28px 16px 20px;
+      border-right: 1px solid var(--border);
+      background: rgba(246, 246, 243, .88);
+      backdrop-filter: blur(18px);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 0 10px 34px;
+      letter-spacing: -.02em;
+    }
+
+    .brand-mark {
+      width: 27px;
+      height: 27px;
+      border: 1px solid var(--text);
+      border-radius: 50%;
+      position: relative;
+      display: grid;
+      place-items: center;
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      border: 1px solid var(--accent);
+      border-radius: 50%;
+      inset: 5px;
+    }
+
+    .brand-mark::after {
+      inset: 9px;
+      border-color: var(--text);
+    }
+
+    .brand-name {
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: .14em;
+    }
+
+    .nav-label {
+      padding: 0 11px 8px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .14em;
+    }
+
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .nav button {
+      border: 0;
+      background: transparent;
+      border-radius: 9px;
+      padding: 9px 11px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--muted);
+      transition: background .2s ease, color .2s ease, transform .2s var(--ease);
+    }
+
+    .nav button:hover {
+      background: var(--surface-2);
+      color: var(--text);
+      transform: translateX(2px);
+    }
+
+    .nav button.active {
+      background: var(--accent-soft);
+      color: var(--text);
+    }
+
+    .nav-icon {
+      width: 17px;
+      text-align: center;
+      font-size: 14px;
+      opacity: .78;
+    }
+
+    .sidebar-bottom {
+      margin-top: auto;
+      padding: 14px 10px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .system {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+
+    /* Main */
+    main {
+      grid-column: 2;
+      min-width: 0;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 42px;
+      border-bottom: 1px solid rgba(222, 222, 217, .8);
+      background: rgba(246, 246, 243, .78);
+      backdrop-filter: blur(18px);
+      z-index: 10;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .breadcrumb strong {
+      color: var(--text);
+      font-weight: 550;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .search {
+      width: 260px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      transition: width .35s var(--ease), border-color .2s ease, box-shadow .2s ease;
+    }
+
+    .search:focus-within {
+      width: 340px;
+      border-color: var(--border-strong);
+      box-shadow: 0 0 0 3px rgba(82,107,99,.07);
+    }
+
+    .search span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .search input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+    }
+
+    .search input::placeholder { color: #999b95; }
+
+    .icon-button {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: transform .2s var(--ease), background .2s ease;
+    }
+
+    .icon-button:hover {
+      transform: translateY(-1px);
+      background: white;
+    }
+
+    .page {
+      display: none;
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 58px 42px 90px;
+      animation: pageIn .5s var(--ease);
+    }
+
+    .page.active { display: block; }
+
+    @keyframes pageIn {
+      from { opacity: 0; transform: translateY(9px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 4vw, 52px);
+      line-height: 1.03;
+      letter-spacing: -.055em;
+      font-weight: 620;
+    }
+
+    .lead {
+      max-width: 570px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .rule {
+      height: 1px;
+      background: var(--border);
+      margin: 44px 0;
+    }
+
+    /* Overview */
+    .hero {
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      margin-top: 52px;
+    }
+
+    .metric {
+      padding: 24px 0;
+      position: relative;
+    }
+
+    .metric + .metric { padding-left: 30px; }
+    .metric + .metric::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 18px;
+      bottom: 18px;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .metric-value {
+      font-size: 27px;
+      letter-spacing: -.04em;
+      font-weight: 600;
+    }
+
+    .metric-label {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -.02em;
+    }
+
+    .section-heading span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .recent-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .recent-item {
+      min-height: 170px;
+      padding: 22px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: background .25s ease, transform .3s var(--ease);
+    }
+
+    .recent-item:hover {
+      background: white;
+      transform: translateY(-2px);
+    }
+
+    .recent-type {
+      color: var(--accent);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .13em;
+    }
+
+    .recent-item h3 {
+      margin: 46px 0 7px;
+      font-size: 15px;
+      font-weight: 570;
+      letter-spacing: -.02em;
+    }
+
+    .recent-item p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* Archive */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+      margin: 35px 0 18px;
+    }
+
+    .filters {
+      display: flex;
+      gap: 6px;
+    }
+
+    .filter {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 7px;
+      padding: 7px 10px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: .2s ease;
+    }
+
+    .filter:hover, .filter.active {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+
+    .archive-table {
+      border-top: 1px solid var(--border);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: minmax(280px, 2fr) 90px 130px 100px;
+      gap: 20px;
+      align-items: center;
+      min-height: 63px;
+      border-bottom: 1px solid var(--border);
+      transition: background .2s ease;
+      cursor: pointer;
+    }
+
+    .row:hover { background: rgba(255,255,255,.55); }
+
+    .row.header {
+      min-height: 42px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+      cursor: default;
+    }
+
+    .row.header:hover { background: transparent; }
+
+    .doc-name {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .doc-icon {
+      width: 29px;
+      height: 34px;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      background: var(--surface);
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 9px;
+      flex: 0 0 auto;
+    }
+
+    .doc-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 540;
+    }
+
+    .subtle { color: var(--muted); font-size: 11px; }
+
+    /* Graph */
+    .graph-shell {
+      height: 610px;
+      margin-top: 35px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background:
+        radial-gradient(circle at 50% 50%, rgba(82,107,99,.06), transparent 35%),
+        var(--surface);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .graph-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,0,0,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,.025) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, black, transparent 90%);
+    }
+
+    .graph-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .edge {
+      stroke: #c6c9c3;
+      stroke-width: 1.2;
+      fill: none;
+      stroke-dasharray: 5 6;
+      animation: dash 12s linear infinite;
+    }
+
+    @keyframes dash { to { stroke-dashoffset: -120; } }
+
+    .node {
+      cursor: pointer;
+      transition: filter .25s ease;
+    }
+
+    .node:hover { filter: drop-shadow(0 5px 10px rgba(0,0,0,.12)); }
+
+    .node circle {
+      fill: var(--surface);
+      stroke: var(--border-strong);
+      stroke-width: 1.3;
+    }
+
+    .node.core circle {
+      fill: var(--accent);
+      stroke: var(--accent);
+    }
+
+    .node text {
+      fill: var(--text);
+      font-size: 12px;
+      font-weight: 540;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+
+    .node.core text { fill: white; }
+
+    .graph-info {
+      position: absolute;
+      left: 22px;
+      bottom: 20px;
+      color: var(--muted);
+      font-size: 11px;
+      background: rgba(251,251,249,.84);
+      border: 1px solid var(--border);
+      padding: 9px 11px;
+      border-radius: 7px;
+      backdrop-filter: blur(10px);
+    }
+
+    /* Concepts */
+    .concept-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 35px;
+    }
+
+    .concept {
+      min-height: 145px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 19px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: transform .3s var(--ease), background .25s ease, border-color .25s ease;
+    }
+
+    .concept:hover {
+      transform: translateY(-4px);
+      background: white;
+      border-color: var(--border-strong);
+    }
+
+    .concept-index {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .concept h3 {
+      margin: 35px 0 4px;
+      font-size: 16px;
+      font-weight: 570;
+    }
+
+    .concept p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .concept-bar {
+      width: 100%;
+      height: 2px;
+      margin-top: 19px;
+      background: var(--surface-2);
+      overflow: hidden;
+      border-radius: 2px;
+    }
+
+    .concept-bar i {
+      display: block;
+      height: 100%;
+      width: var(--w);
+      background: var(--accent);
+      transform-origin: left;
+      animation: grow .8s var(--ease) both;
+    }
+
+    @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+    /* Timeline */
+    .timeline {
+      margin-top: 40px;
+      border-left: 1px solid var(--border-strong);
+      padding-left: 30px;
+    }
+
+    .year {
+      position: relative;
+      margin-bottom: 52px;
+    }
+
+    .year::before {
+      content: "";
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border: 1px solid var(--accent);
+      background: var(--bg);
+      border-radius: 50%;
+      left: -34px;
+      top: 6px;
+    }
+
+    .year-label {
+      color: var(--accent);
+      font-size: 11px;
+      letter-spacing: .1em;
+      font-weight: 650;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 18px;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .event-date { color: var(--muted); font-size: 11px; }
+    .event-title { font-weight: 550; }
+    .event-description { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+    /* Document modal */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(20,22,20,.22);
+      backdrop-filter: blur(5px);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease;
+      z-index: 50;
+    }
+
+    .overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .document-panel {
+      width: min(850px, 100%);
+      max-height: 85vh;
+      overflow: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      transform: translateY(18px) scale(.98);
+      transition: transform .35s var(--ease);
+    }
+
+    .overlay.open .document-panel {
+      transform: translateY(0) scale(1);
+    }
+
+    .document-head {
+      position: sticky;
+      top: 0;
+      padding: 18px 22px;
+      background: rgba(251,251,249,.9);
+      backdrop-filter: blur(15px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      z-index: 2;
+    }
+
+    .document-body {
+      padding: 46px clamp(24px, 8vw, 78px) 70px;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    .document-body .doc-meta {
+      font-family: Inter, sans-serif;
+      color: var(--accent);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: .13em;
+    }
+
+    .document-body h2 {
+      margin: 12px 0 28px;
+      font-family: Inter, sans-serif;
+      font-size: 34px;
+      letter-spacing: -.045em;
+      line-height: 1.05;
+    }
+
+    .document-body p {
+      font-size: 16px;
+      line-height: 1.85;
+      color: #363833;
+    }
+
+    .document-body blockquote {
+      border-left: 2px solid var(--accent);
+      margin: 30px 0;
+      padding-left: 20px;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      background: var(--text);
+      color: white;
+      border-radius: 9px;
+      padding: 10px 13px;
+      font-size: 11px;
+      transform: translateY(15px);
+      opacity: 0;
+      pointer-events: none;
+      transition: .3s var(--ease);
+      z-index: 100;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Mobile */
+    .mobile-bar {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      :root { --sidebar: 210px; }
+      .topbar { padding: 0 24px; }
+      .page { padding: 42px 24px 70px; }
+      .recent-grid { grid-template-columns: 1fr; }
+      .concept-grid { grid-template-columns: repeat(2, 1fr); }
+      .search { width: 190px; }
+      .search:focus-within { width: 230px; }
+    }
+
+    @media (max-width: 680px) {
+      .app { display: block; }
+      .sidebar {
+        display: none;
+      }
+      main { padding-bottom: 64px; }
+      .topbar { height: 60px; padding: 0 16px; }
+      .breadcrumb { font-size: 11px; }
+      .search { display: none; }
+      .page { padding: 35px 17px 60px; }
+      .hero { min-height: 330px; }
+      .metrics { grid-template-columns: 1fr 1fr 1fr; }
+      .metric + .metric { padding-left: 14px; }
+      .metric-value { font-size: 21px; }
+      .recent-grid { grid-template-columns: 1fr; }
+      .concept-grid { grid-template-columns: 1fr; }
+      .row {
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        padding: 12px 0;
+      }
+      .row > :nth-child(2),
+      .row > :nth-child(3) { display: none; }
+      .row.header { display: none; }
+      .mobile-bar {
+        position: fixed;
+        display: flex;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        height: 54px;
+        padding: 5px;
+        background: rgba(251,251,249,.9);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        backdrop-filter: blur(18px);
+        box-shadow: 0 12px 35px rgba(0,0,0,.09);
+        z-index: 30;
+      }
+      .mobile-bar button {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        border-radius: 8px;
+        font-size: 10px;
+      }
+      .mobile-bar button.active {
+        background: var(--accent-soft);
+        color: var(--text);
+      }
+      .graph-shell { height: 470px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div class="brand-name">CHORA</div>
+      </div>
+
+      <div class="nav-label">Explore</div>
+      <nav class="nav">
+        <button class="active" data-page="overview"><span class="nav-icon">◉</span>Overview</button>
+        <button data-page="archive"><span class="nav-icon">◇</span>Archive</button>
+        <button data-page="graph"><span class="nav-icon">◎</span>Graph</button>
+        <button data-page="concepts"><span class="nav-icon">✦</span>Concepts</button>
+        <button data-page="timeline"><span class="nav-icon">◌</span>Timeline</button>
+      </nav>
+
+      <div class="nav-label" style="margin-top:28px;">Collections</div>
+      <nav class="nav">
+        <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>Research</button>
+        <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>University</button>
+        <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>Projects</button>
+        <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>Notes</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="system">
+          <span>CHORA CORE</span>
+          <span class="status"><i class="status-dot"></i>online</span>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div class="breadcrumb"><span>CHORA</span><span>/</span><strong id="pageTitle">Overview</strong></div>
+        <div class="top-actions">
+          <label class="search">
+            <span>⌕</span>
+            <input id="searchInput" type="search" placeholder="Search archive..." autocomplete="off" />
+          </label>
+          <button class="icon-button" onclick="showToast('CHORA is online')" aria-label="System status">◌</button>
+        </div>
+      </header>
+
+      <!-- OVERVIEW -->
+      <section class="page active" id="overview">
+        <div class="hero">
+          <div class="eyebrow">Semantic Archive</div>
+          <h1>A place for<br>your knowledge.</h1>
+          <p class="lead">
+            CHORA unifies documents, concepts and relations into a single navigable
+            semantic space. The archive is the source. Everything else grows from it.
+          </p>
+
+          <div class="metrics">
+            <div class="metric">
+              <div class="metric-value">2,481</div>
+              <div class="metric-label">Documents</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">18,392</div>
+              <div class="metric-label">Concepts</div>
+            </div>
+            <div class="metric">
+              <div class="metric-value">4,921</div>
+              <div class="metric-label">Entities</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-heading">
+          <h2>Recently explored</h2>
+          <span>Last 7 days</span>
+        </div>
+
+        <div class="recent-grid">
+          <article class="recent-item" onclick="openDocument('SourceZero GWM')">
+            <div class="recent-type">Research · Markdown</div>
+            <h3>SourceZero GWM</h3>
+            <p>Modular Neural Cognitive Architecture</p>
+          </article>
+          <article class="recent-item" onclick="openDocument('Oracle Architecture')">
+            <div class="recent-type">Research · Markdown</div>
+            <h3>Oracle Architecture</h3>
+            <p>Memory, graph and semantic retrieval</p>
+          </article>
+          <article class="recent-item" onclick="openDocument('CHORA Architecture')">
+            <div class="recent-type">System · Markdown</div>
+            <h3>CHORA Architecture</h3>
+            <p>Semantic space and knowledge model</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ARCHIVE -->
+      <section class="page" id="archive">
+        <div class="eyebrow">Corpus</div>
+        <h1>Archive</h1>
+        <p class="lead">Every document in one place. The physical archive remains simple; CHORA adds structure on top of it.</p>
+
+        <div class="toolbar">
+          <div class="filters">
+            <button class="filter active">All</button>
+            <button class="filter">Research</button>
+            <button class="filter">University</button>
+            <button class="filter">Projects</button>
+          </div>
+          <button class="filter" onclick="showToast('Import pipeline ready')">＋ Import</button>
+        </div>
+
+        <div class="archive-table" id="archiveTable">
+          <div class="row header">
+            <div>Name</div><div>Type</div><div>Updated</div><div>Collection</div>
+          </div>
+          <div class="row" onclick="openDocument('SourceZero GWM')">
+            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">SourceZero GWM</div><div class="subtle">/research/sourcezero/</div></div></div>
+            <div class="subtle">Markdown</div><div class="subtle">Today</div><div class="subtle">Research</div>
+          </div>
+          <div class="row" onclick="openDocument('Oracle Architecture')">
+            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">Oracle Architecture</div><div class="subtle">/research/oracle/</div></div></div>
+            <div class="subtle">Markdown</div><div class="subtle">Yesterday</div><div class="subtle">Research</div>
+          </div>
+          <div class="row" onclick="openDocument('CHORA Architecture')">
+            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">CHORA Architecture</div><div class="subtle">/system/chora/</div></div></div>
+            <div class="subtle">Markdown</div><div class="subtle">Sep 4</div><div class="subtle">Projects</div>
+          </div>
+          <div class="row" onclick="openDocument('University Notes — Algorithms')">
+            <div class="doc-name"><div class="doc-icon">PDF</div><div><div class="doc-title">University Notes — Algorithms</div><div class="subtle">/university/algorithms/</div></div></div>
+            <div class="subtle">PDF</div><div class="subtle">Sep 3</div><div class="subtle">University</div>
+          </div>
+          <div class="row" onclick="openDocument('AI Architecture Notes')">
+            <div class="doc-name"><div class="doc-icon">TXT</div><div><div class="doc-title">AI Architecture Notes</div><div class="subtle">/notes/ai/</div></div></div>
+            <div class="subtle">Text</div><div class="subtle">Sep 2</div><div class="subtle">Notes</div>
+          </div>
+          <div class="row" onclick="openDocument('World Model Research')">
+            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">World Model Research</div><div class="subtle">/research/world-models/</div></div></div>
+            <div class="subtle">Markdown</div><div class="subtle">Aug 31</div><div class="subtle">Research</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GRAPH -->
+      <section class="page" id="graph">
+        <div class="eyebrow">Relations</div>
+        <h1>Graph</h1>
+        <p class="lead">A structural view of the relationships emerging from the archive.</p>
+
+        <div class="graph-shell">
+          <svg class="graph-svg" viewBox="0 0 1000 610" preserveAspectRatio="xMidYMid meet">
+            <path class="edge" d="M500 305 L300 180 M500 305 L700 175 M500 305 L280 420 M500 305 L720 430 M300 180 L160 305 M700 175 L840 295 M280 420 L430 505 M720 430 L850 490 M300 180 L700 175" />
+            <g class="node core" transform="translate(500 305)" onclick="openDocument('CHORA')">
+              <circle r="56"></circle><text>CHORA</text>
+            </g>
+            <g class="node" transform="translate(300 180)" onclick="openDocument('SourceZero GWM')">
+              <circle r="42"></circle><text>SourceZero</text>
+            </g>
+            <g class="node" transform="translate(700 175)">
+              <circle r="43"></circle><text>World Model</text>
+            </g>
+            <g class="node" transform="translate(280 420)">
+              <circle r="42"></circle><text>Oracle</text>
+            </g>
+            <g class="node" transform="translate(720 430)">
+              <circle r="45"></circle><text>Knowledge</text>
+            </g>
+            <g class="node" transform="translate(160 305)">
+              <circle r="31"></circle><text>GWM</text>
+            </g>
+            <g class="node" transform="translate(840 295)">
+              <circle r="34"></circle><text>Planning</text>
+            </g>
+            <g class="node" transform="translate(430 505)">
+              <circle r="32"></circle><text>Memory</text>
+            </g>
+            <g class="node" transform="translate(850 490)">
+              <circle r="31"></circle><text>Graph</text>
+            </g>
+          </svg>
+          <div class="graph-info">9 nodes · 9 relations · semantic view</div>
+        </div>
+      </section>
+
+      <!-- CONCEPTS -->
+      <section class="page" id="concepts">
+        <div class="eyebrow">Semantic Layer</div>
+        <h1>Concepts</h1>
+        <p class="lead">Concepts are not folders. They are recurring semantic structures extracted from the corpus.</p>
+
+        <div class="concept-grid">
+          <article class="concept"><div class="concept-index">01</div><h3>World Model</h3><p>47 documents · 132 relations</p><div class="concept-bar"><i style="--w:82%"></i></div></article>
+          <article class="concept"><div class="concept-index">02</div><h3>Artificial Intelligence</h3><p>83 documents · 218 relations</p><div class="concept-bar"><i style="--w:96%"></i></div></article>
+          <article class="concept"><div class="concept-index">03</div><h3>Knowledge Graph</h3><p>31 documents · 77 relations</p><div class="concept-bar"><i style="--w:61%"></i></div></article>
+          <article class="concept"><div class="concept-index">04</div><h3>Grounding</h3><p>19 documents · 54 relations</p><div class="concept-bar"><i style="--w:43%"></i></div></article>
+          <article class="concept"><div class="concept-index">05</div><h3>Memory</h3><p>42 documents · 104 relations</p><div class="concept-bar"><i style="--w:69%"></i></div></article>
+          <article class="concept"><div class="concept-index">06</div><h3>Planning</h3><p>27 documents · 68 relations</p><div class="concept-bar"><i style="--w:54%"></i></div></article>
+        </div>
+      </section>
+
+      <!-- TIMELINE -->
+      <section class="page" id="timeline">
+        <div class="eyebrow">Temporal Layer</div>
+        <h1>Timeline</h1>
+        <p class="lead">A chronological perspective over the evolution of the archive and its ideas.</p>
+
+        <div class="timeline">
+          <div class="year">
+            <div class="year-label">2026</div>
+            <div class="event"><div class="event-date">SEP 06</div><div><div class="event-title">CHORA 2.0</div><div class="event-description">Unified semantic archive and interface redesign.</div></div></div>
+            <div class="event"><div class="event-date">SEP 04</div><div><div class="event-title">CHORA Architecture</div><div class="event-description">Definition of the semantic archive model.</div></div></div>
+            <div class="event"><div class="event-date">AUG 18</div><div><div class="event-title">Oracle Research</div><div class="event-description">Research into memory, graph and AI orchestration.</div></div></div>
+          </div>
+          <div class="year">
+            <div class="year-label">ORIGIN</div>
+            <div class="event"><div class="event-date">EARLIER</div><div><div class="event-title">The Archive</div><div class="event-description">The first collection of notes, research and technical documents.</div></div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="mobile-bar">
+    <button class="active" data-page="overview">Overview</button>
+    <button data-page="archive">Archive</button>
+    <button data-page="graph">Graph</button>
+    <button data-page="concepts">Concepts</button>
+  </div>
+
+  <div class="overlay" id="overlay" onclick="closeIfBackdrop(event)">
+    <article class="document-panel">
+      <div class="document-head">
+        <div class="breadcrumb"><span>ARCHIVE</span><span>/</span><strong id="modalTitle">Document</strong></div>
+        <button class="icon-button" onclick="closeDocument()">×</button>
+      </div>
+      <div class="document-body">
+        <div class="doc-meta">Markdown · Research</div>
+        <h2 id="documentHeading">SourceZero GWM</h2>
+        <p>
+          This is the document reading surface of CHORA. In the real system this area
+          is populated directly from the normalized archive, while semantic metadata,
+          concepts and relations remain available around the document.
+        </p>
+        <p>
+          The original document is preserved as the primary source. Everything derived
+          by CHORA — embeddings, concepts, entities and inferred relations — belongs
+          to a separate semantic layer and can be regenerated without changing the source.
+        </p>
+        <blockquote>
+          The document is the atom. The graph is the relation. The semantic space is the continuum.
+        </blockquote>
+        <p>
+          This separation keeps the archive deterministic and lets intelligence operate
+          on top of CHORA instead of becoming a dependency of the archive itself.
+        </p>
+      </div>
+    </article>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const PENELOPE_API = 'http://localhost:5000';
+    const ORACLE_API = window.location.origin;
+
+    const buttons = document.querySelectorAll('[data-page]');
+    const pages = document.querySelectorAll('.page');
+    const pageTitle = document.getElementById('pageTitle');
+    const searchInput = document.getElementById('searchInput');
+    const overlay = document.getElementById('overlay');
+    const modalTitle = document.getElementById('modalTitle');
+    const documentHeading = document.getElementById('documentHeading');
+    const statusDot = document.querySelector('.status-dot');
+    const statusSystem = document.querySelector('.system span:first-child');
+    let toastTimer;
+
+    // ─── Navigation ────────────────────────────────────────────
+    function navigate(page) {
+      pages.forEach(p => p.classList.toggle('active', p.id === page));
+      buttons.forEach(b => b.classList.toggle('active', b.dataset.page === page));
+      pageTitle.textContent = page.charAt(0).toUpperCase() + page.slice(1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    buttons.forEach(button => {
+      button.addEventListener('click', () => navigate(button.dataset.page));
+    });
+
+    // ─── Search ────────────────────────────────────────────────
+    searchInput.addEventListener('keydown', async event => {
+      if (event.key === 'Enter' && searchInput.value.trim()) {
+        const q = searchInput.value.trim();
+        navigate('archive');
+        try {
+          const resp = await fetch(PENELOPE_API + '/api/search?q=' + encodeURIComponent(q) + '&top=20');
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.results && data.results.length > 0) {
+              renderArchiveTable(data.results.map(r => ({
+                label: r.file_name || r.node_id || q,
+                type: (r.mime_type || '').split('/').pop() || 'Unknown',
+                path: r.file_path || '',
+                id: r.node_id || ''
+              })));
+              showToast('Found ' + data.results.length + ' results for "' + q + '"');
+              return;
+            }
+          }
+        } catch(e) {}
+        showToast('Search: ' + q);
+      }
+    });
+
+    // ─── Document modal ───────────────────────────────────────
+    let currentDocId = null;
+
+    async function openDocument(name, docId) {
+      currentDocId = docId || null;
+      modalTitle.textContent = name;
+      documentHeading.textContent = name;
+
+      // Try fetching document details from Penelope
+      if (docId) {
+        try {
+          const resp = await fetch(PENELOPE_API + '/api/nodes/' + encodeURIComponent(docId));
+          if (resp.ok) {
+            const data = await resp.json();
+            const n = data.node || {};
+            const meta = n.metadata || {};
+            const file = n.file || {};
+            const metaEl = document.querySelector('.document-body .doc-meta');
+            if (metaEl) {
+              metaEl.textContent = (file.mime_type || n.type || 'Document') + ' \u00B7 ' + (file.path || '');
+            }
+            const bodyEl = document.querySelector('.document-body p');
+            if (bodyEl && n.label) {
+              bodyEl.textContent = 'Document: ' + n.label + '. Metadata extracted by Penelope knowledge graph.';
+            }
+          }
+        } catch(e) {}
+      }
+
+      overlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDocument() {
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+      currentDocId = null;
+    }
+
+    function closeIfBackdrop(event) {
+      if (event.target === overlay) closeDocument();
+    }
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeDocument();
+    });
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    // ─── Filters ──────────────────────────────────────────────
+    document.querySelectorAll('.filter').forEach(filter => {
+      filter.addEventListener('click', () => {
+        document.querySelectorAll('.filter').forEach(f => f.classList.remove('active'));
+        filter.classList.add('active');
+        const coll = filter.textContent.trim();
+        if (coll !== 'All') {
+          showToast('Filter: ' + coll);
+        }
+      });
+    });
+
+    // ─── Data fetching ────────────────────────────────────────
+    async function fetchStats() {
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/stats');
+        if (!resp.ok) throw new Error('Penelope not available');
+        const data = await resp.json();
+
+        const docs = data.nodes_by_type?.File || data.total_nodes || 0;
+        const persons = data.nodes_by_type?.Person || 0;
+        const locations = data.nodes_by_type?.Location || 0;
+        const projects = data.nodes_by_type?.Project || 0;
+        const edges = data.total_edges || 0;
+
+        const metrics = document.querySelectorAll('.metric-value');
+        if (metrics.length >= 3) {
+          metrics[0].textContent = docs.toLocaleString();
+          metrics[1].textContent = (persons + locations || data.total_nodes - docs || 0).toLocaleString();
+          metrics[2].textContent = (persons || 0).toLocaleString();
+        }
+
+        // Update graph info
+        const graphInfo = document.querySelector('.graph-info');
+        if (graphInfo) {
+          const nodeCount = data.total_nodes || 0;
+          graphInfo.textContent = nodeCount + ' nodes \u00B7 ' + edges + ' relations \u00B7 semantic view';
+        }
+
+        return data;
+      } catch (e) {
+        console.log('Penelope API not available, using static data');
+        return null;
+      }
+    }
+
+    function renderArchiveTable(nodes) {
+      const table = document.getElementById('archiveTable');
+      if (!table) return;
+
+      // Keep header row
+      let html = '<div class="row header"><div>Name</div><div>Type</div><div>Updated</div><div>Collection</div></div>';
+
+      if (!nodes || nodes.length === 0) {
+        html += '<div class="row" style="cursor:default;justify-content:center;padding:30px;color:var(--muted);grid-template-columns:1fr"><div>No documents indexed. Start Penelope scan.</div></div>';
+        table.innerHTML = html;
+        return;
+      }
+
+      nodes.slice(0, 20).forEach(n => {
+        const label = n.label || n.id || 'Unknown';
+        const type = n.type || 'File';
+        const path = n.path || n.file_path || '';
+        const ext = (path.match(/\.(\w+)$/) || ['', type])[1].toUpperCase().slice(0, 4);
+        const date = n.created_at ? n.created_at.slice(0, 10) : '—';
+
+        html += '<div class="row" onclick="openDocument(\'' + escapeHtml(label) + '\', \'' + escapeHtml(n.id || '') + '\')">' +
+          '<div class="doc-name"><div class="doc-icon">' + escapeHtml(ext) + '</div><div><div class="doc-title">' + escapeHtml(label) + '</div><div class="subtle">' + escapeHtml(path.slice(0, 50)) + '</div></div></div>' +
+          '<div class="subtle">' + escapeHtml(type) + '</div>' +
+          '<div class="subtle">' + escapeHtml(date) + '</div>' +
+          '<div class="subtle">' + (n.collection || '—') + '</div></div>';
+      });
+
+      table.innerHTML = html;
+    }
+
+    async function fetchArchive() {
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/nodes?limit=50');
+        if (!resp.ok) throw new Error('Penelope not available');
+        const data = await resp.json();
+        renderArchiveTable(data.nodes || []);
+      } catch (e) {
+        console.log('Penelope not available, keeping static archive');
+      }
+    }
+
+    async function fetchConcepts() {
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/stats');
+        if (!resp.ok) throw new Error('Penelope not available');
+        const data = await resp.json();
+        const grid = document.querySelector('.concept-grid');
+        if (!grid) return;
+
+        const byType = data.nodes_by_type || {};
+        const entries = Object.entries(byType).filter(([k]) => k !== 'File');
+        const maxCount = Math.max(...entries.map(([,v]) => v), 1);
+
+        let html = '';
+        entries.forEach(([type, count], i) => {
+          const pct = Math.round((count / maxCount) * 100);
+          html += '<article class="concept"><div class="concept-index">' +
+            String(i + 1).padStart(2, '0') + '</div><h3>' + escapeHtml(type) + '</h3><p>' +
+            count + ' nodes</p><div class="concept-bar"><i style="--w:' + pct + '%"></i></div></article>';
+        });
+
+        if (entries.length === 0) {
+          html += '<article class="concept" style="grid-column:1/-1;text-align:center;padding:40px"><h3>No concepts yet</h3><p>Run Penelope scan to populate the graph.</p></article>';
+        }
+        grid.innerHTML = html;
+      } catch (e) {
+        console.log('Penelope not available, keeping static concepts');
+      }
+    }
+
+    async function fetchTimeline() {
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/events/timeline');
+        if (!resp.ok) throw new Error('Penelope not available');
+        const data = await resp.json();
+        const timeline = document.querySelector('.timeline');
+        if (!timeline || !data.events) return;
+
+        let html = '';
+        const grouped = {};
+        data.events.forEach(ev => {
+          const year = (ev.date || '').slice(0, 4) || 'Origin';
+          if (!grouped[year]) grouped[year] = [];
+          grouped[year].push(ev);
+        });
+
+        Object.entries(grouped).forEach(([year, events]) => {
+          html += '<div class="year"><div class="year-label">' + escapeHtml(year) + '</div>';
+          events.forEach(ev => {
+            html += '<div class="event"><div class="event-date">' + escapeHtml((ev.date || '').slice(5, 10) || ev.date) + '</div>' +
+              '<div><div class="event-title">' + escapeHtml(ev.title || ev.label || 'Event') + '</div>' +
+              '<div class="event-description">' + escapeHtml(ev.description || '') + '</div></div></div>';
+          });
+          html += '</div>';
+        });
+
+        if (Object.keys(grouped).length > 0) timeline.innerHTML = html;
+      } catch (e) {
+        console.log('Timeline not available, keeping static data');
+      }
+    }
+
+    // ─── Health check ─────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const resp = await fetch(ORACLE_API + '/api/health');
+        if (resp.ok) {
+          statusDot.style.background = 'var(--accent)';
+          statusDot.style.boxShadow = '0 0 0 4px var(--accent-soft)';
+          if (statusSystem) statusSystem.textContent = 'CHORA CORE';
+        }
+      } catch (e) {
+        statusDot.style.background = '#c0392b';
+        statusDot.style.boxShadow = '0 0 0 4px rgba(192,57,43,.15)';
+        if (statusSystem) statusSystem.textContent = 'OFFLINE';
+      }
+
+      // Penelope status
+      try {
+        const pResp = await fetch(PENELOPE_API + '/api/stats');
+        if (!pResp.ok) throw new Error('offline');
+      } catch (e) {
+        showToast('Penelope graph API not available at :5000');
+      }
+    }
+
+    // ─── Utility ──────────────────────────────────────────────
+    function escapeHtml(text) {
+      if (!text) return '';
+      const d = document.createElement('div');
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    // ─── Init ─────────────────────────────────────────────────
+    async function init() {
+      await fetchStats();
+      fetchArchive();
+      fetchConcepts();
+      fetchTimeline();
+      checkHealth();
+      setInterval(checkHealth, 30000);
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
