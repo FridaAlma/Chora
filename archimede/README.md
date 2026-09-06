@@ -47,9 +47,9 @@ All queries are strictly `SELECT` or `WITH`. Any write attempt is blocked at the
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        ARCHIMEDE QUERY (CLI)                        │
+│                        ARCHIMEDE QUERY (CLI)                         │
 │                     (archimede/query.py)                             │
-│   Entry point: python -m archimede.query <command> [options]        │
+│   Entry point: python -m archimede.query <command> [options]         │
 └──────┬───────────────────────────────────────────────────────────────┘
        │
        ├── Command: stats
@@ -63,35 +63,35 @@ All queries are strictly `SELECT` or `WITH`. Any write attempt is blocked at the
                     │
                     ▼
        ┌─────────────────────────────────────────────────────┐
-       │                  ARCHIMEDE MODULES                   │
+       │                  ARCHIMEDE MODULES                  │
        │                                                     │
        │  ┌─────────────────────────────────────────────┐    │
-       │  │           GRAPH READER (read-only)           │    │
+       │  │           GRAPH READER (read-only)          │    │
        │  │  PenelopeGraphReader → MariaDB (SELECT)     │    │
        │  │  PenelopeChromaReader → ChromaDB (query)    │    │
        │  └─────────────────────────────────────────────┘    │
        │                                                     │
        │  ┌─────────────────────────────────────────────┐    │
-       │  │           IDENTITY ENGINE                     │    │
-       │  │  face_engine.py → InsightFace ArcFace        │    │
-       │  │  matcher.py → face matching + couple search  │    │
+       │  │           IDENTITY ENGINE                   │    │
+       │  │  face_engine.py → InsightFace ArcFace       │    │
+       │  │  matcher.py → face matching + couple search │    │
        │  └─────────────────────────────────────────────┘    │
        │                                                     │
        │  ┌─────────────────────────────────────────────┐    │
-       │  │           PRESENTATION LAYER                 │    │
+       │  │           PRESENTATION LAYER                │    │
        │  │  report.py → HTML report with photo gallery │    │
        │  └─────────────────────────────────────────────┘    │
        └─────────────────────────────────────────────────────┘
                               │
                               ▼
-       ┌─────────────────────────────────────────────────────┐
+       ┌──────────────────────────────────────────────────────┐
        │              PENELOPE (external system)              │
-       │                                                     │
-       │  ┌──────────────┐          ┌──────────────────┐     │
+       │                                                      │
+       │  ┌──────────────┐          ┌───────────────────┐     │
        │  │   MariaDB    │          │    ChromaDB       │     │
        │  │ (graph data) │          │ (image embeddings)│     │
-       │  └──────────────┘          └──────────────────┘     │
-       └─────────────────────────────────────────────────────┘
+       │  └──────────────┘          └───────────────────┘     │
+       └──────────────────────────────────────────────────────┘
 ```
 
 ### Operation Flow
