@@ -25,6 +25,8 @@ logs/
 # Quarantine
 **/quarantine/
 
+workspace/*
+
 doc/
 
 *.db
