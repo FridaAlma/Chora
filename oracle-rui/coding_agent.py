@@ -488,6 +488,17 @@ agent_os = AgentOS(
 
 app = agent_os.get_app()
 
+# ── Override AgentOS root route with CHORA UI ──────────────────────
+@app.get("/", include_in_schema=False)
+@app.get("/ui", include_in_schema=False)
+async def serve_chora_ui():
+    from fastapi.responses import FileResponse, JSONResponse
+    from pathlib import Path
+    index_path = Path(__file__).resolve().parent.parent / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    return JSONResponse({"error": "index.html not found"}, status_code=404)
+
 # ── Apply Security Middleware ────────────────────────────────────────
 if API_SECURITY_AVAILABLE:
     # Apply security middleware
