@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CHORA — Semantic Archive</title>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
     :root {
       --bg: #f6f6f3;
@@ -44,7 +45,6 @@
       grid-template-columns: var(--sidebar) 1fr;
     }
 
-    /* Sidebar */
     .sidebar {
       position: fixed;
       inset: 0 auto 0 0;
@@ -170,7 +170,6 @@
       box-shadow: 0 0 0 4px var(--accent-soft);
     }
 
-    /* Main */
     main {
       grid-column: 2;
       min-width: 0;
@@ -228,10 +227,7 @@
       box-shadow: 0 0 0 3px rgba(82,107,99,.07);
     }
 
-    .search span {
-      color: var(--muted);
-      font-size: 13px;
-    }
+    .search span { color: var(--muted); font-size: 13px; }
 
     .search input {
       width: 100%;
@@ -298,13 +294,8 @@
       line-height: 1.7;
     }
 
-    .rule {
-      height: 1px;
-      background: var(--border);
-      margin: 44px 0;
-    }
+    .rule { height: 1px; background: var(--border); margin: 44px 0; }
 
-    /* Overview */
     .hero {
       min-height: 410px;
       display: flex;
@@ -362,14 +353,11 @@
       letter-spacing: -.02em;
     }
 
-    .section-heading span {
-      color: var(--muted);
-      font-size: 11px;
-    }
+    .section-heading span { color: var(--muted); font-size: 11px; }
 
     .recent-grid {
       display: grid;
-      grid-template-columns: 1.4fr 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 1px;
       background: var(--border);
       border: 1px solid var(--border);
@@ -410,7 +398,6 @@
       font-size: 12px;
     }
 
-    /* Archive */
     .toolbar {
       display: flex;
       justify-content: space-between;
@@ -433,14 +420,9 @@
       transition: .2s ease;
     }
 
-    .filter:hover, .filter.active {
-      color: var(--text);
-      background: var(--surface-2);
-    }
+    .filter:hover, .filter.active { color: var(--text); background: var(--surface-2); }
 
-    .archive-table {
-      border-top: 1px solid var(--border);
-    }
+    .archive-table { border-top: 1px solid var(--border); }
 
     .row {
       display: grid;
@@ -495,75 +477,20 @@
 
     .subtle { color: var(--muted); font-size: 11px; }
 
-    /* Graph */
     .graph-shell {
       height: 610px;
       margin-top: 35px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background:
-        radial-gradient(circle at 50% 50%, rgba(82,107,99,.06), transparent 35%),
-        var(--surface);
+      background: var(--surface);
       position: relative;
       overflow: hidden;
     }
 
-    .graph-shell::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(0,0,0,.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,0,0,.025) 1px, transparent 1px);
-      background-size: 42px 42px;
-      mask-image: linear-gradient(to bottom, black, transparent 90%);
-    }
-
-    .graph-svg {
-      position: absolute;
-      inset: 0;
+    #graph-container {
       width: 100%;
       height: 100%;
     }
-
-    .edge {
-      stroke: #c6c9c3;
-      stroke-width: 1.2;
-      fill: none;
-      stroke-dasharray: 5 6;
-      animation: dash 12s linear infinite;
-    }
-
-    @keyframes dash { to { stroke-dashoffset: -120; } }
-
-    .node {
-      cursor: pointer;
-      transition: filter .25s ease;
-    }
-
-    .node:hover { filter: drop-shadow(0 5px 10px rgba(0,0,0,.12)); }
-
-    .node circle {
-      fill: var(--surface);
-      stroke: var(--border-strong);
-      stroke-width: 1.3;
-    }
-
-    .node.core circle {
-      fill: var(--accent);
-      stroke: var(--accent);
-    }
-
-    .node text {
-      fill: var(--text);
-      font-size: 12px;
-      font-weight: 540;
-      text-anchor: middle;
-      dominant-baseline: middle;
-      pointer-events: none;
-    }
-
-    .node.core text { fill: white; }
 
     .graph-info {
       position: absolute;
@@ -578,7 +505,6 @@
       backdrop-filter: blur(10px);
     }
 
-    /* Concepts */
     .concept-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -602,22 +528,9 @@
       border-color: var(--border-strong);
     }
 
-    .concept-index {
-      color: var(--muted);
-      font-size: 10px;
-    }
-
-    .concept h3 {
-      margin: 35px 0 4px;
-      font-size: 16px;
-      font-weight: 570;
-    }
-
-    .concept p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 11px;
-    }
+    .concept-index { color: var(--muted); font-size: 10px; }
+    .concept h3 { margin: 35px 0 4px; font-size: 16px; font-weight: 570; }
+    .concept p { margin: 0; color: var(--muted); font-size: 11px; }
 
     .concept-bar {
       width: 100%;
@@ -639,7 +552,6 @@
 
     @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
-    /* Timeline */
     .timeline {
       margin-top: 40px;
       border-left: 1px solid var(--border-strong);
@@ -663,12 +575,7 @@
       top: 6px;
     }
 
-    .year-label {
-      color: var(--accent);
-      font-size: 11px;
-      letter-spacing: .1em;
-      font-weight: 650;
-    }
+    .year-label { color: var(--accent); font-size: 11px; letter-spacing: .1em; font-weight: 650; }
 
     .event {
       display: grid;
@@ -682,7 +589,6 @@
     .event-title { font-weight: 550; }
     .event-description { color: var(--muted); font-size: 12px; margin-top: 3px; }
 
-    /* Document modal */
     .overlay {
       position: fixed;
       inset: 0;
@@ -697,10 +603,7 @@
       z-index: 50;
     }
 
-    .overlay.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
 
     .document-panel {
       width: min(850px, 100%);
@@ -714,9 +617,7 @@
       transition: transform .35s var(--ease);
     }
 
-    .overlay.open .document-panel {
-      transform: translateY(0) scale(1);
-    }
+    .overlay.open .document-panel { transform: translateY(0) scale(1); }
 
     .document-head {
       position: sticky;
@@ -765,7 +666,6 @@
       font-style: italic;
     }
 
-    /* Toast */
     .toast {
       position: fixed;
       right: 24px;
@@ -782,15 +682,17 @@
       z-index: 100;
     }
 
-    .toast.show {
-      transform: translateY(0);
-      opacity: 1;
-    }
+    .toast.show { transform: translateY(0); opacity: 1; }
 
-    /* Mobile */
-    .mobile-bar {
-      display: none;
+    .mobile-bar { display: none; }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 16px;
+      font-size: 13px;
     }
+    .meta-grid .key { color: var(--muted); }
 
     @media (max-width: 900px) {
       :root { --sidebar: 210px; }
@@ -804,9 +706,7 @@
 
     @media (max-width: 680px) {
       .app { display: block; }
-      .sidebar {
-        display: none;
-      }
+      .sidebar { display: none; }
       main { padding-bottom: 64px; }
       .topbar { height: 60px; padding: 0 16px; }
       .breadcrumb { font-size: 11px; }
@@ -818,22 +718,14 @@
       .metric-value { font-size: 21px; }
       .recent-grid { grid-template-columns: 1fr; }
       .concept-grid { grid-template-columns: 1fr; }
-      .row {
-        grid-template-columns: 1fr auto;
-        gap: 8px;
-        padding: 12px 0;
-      }
-      .row > :nth-child(2),
-      .row > :nth-child(3) { display: none; }
+      .row { grid-template-columns: 1fr auto; gap: 8px; padding: 12px 0; }
+      .row > :nth-child(2), .row > :nth-child(3) { display: none; }
       .row.header { display: none; }
       .mobile-bar {
         position: fixed;
         display: flex;
-        left: 10px;
-        right: 10px;
-        bottom: 10px;
-        height: 54px;
-        padding: 5px;
+        left: 10px; right: 10px; bottom: 10px;
+        height: 54px; padding: 5px;
         background: rgba(251,251,249,.9);
         border: 1px solid var(--border);
         border-radius: 12px;
@@ -842,17 +734,10 @@
         z-index: 30;
       }
       .mobile-bar button {
-        flex: 1;
-        border: 0;
-        background: transparent;
-        color: var(--muted);
-        border-radius: 8px;
-        font-size: 10px;
+        flex: 1; border: 0; background: transparent;
+        color: var(--muted); border-radius: 8px; font-size: 10px;
       }
-      .mobile-bar button.active {
-        background: var(--accent-soft);
-        color: var(--text);
-      }
+      .mobile-bar button.active { background: var(--accent-soft); color: var(--text); }
       .graph-shell { height: 470px; }
     }
 
@@ -864,7 +749,6 @@
     }
   </style>
 </head>
-
 <body>
   <div class="app">
     <aside class="sidebar">
@@ -872,7 +756,6 @@
         <div class="brand-mark"></div>
         <div class="brand-name">CHORA</div>
       </div>
-
       <div class="nav-label">Explore</div>
       <nav class="nav">
         <button class="active" data-page="overview"><span class="nav-icon">◉</span>Overview</button>
@@ -881,19 +764,17 @@
         <button data-page="concepts"><span class="nav-icon">✦</span>Concepts</button>
         <button data-page="timeline"><span class="nav-icon">◌</span>Timeline</button>
       </nav>
-
       <div class="nav-label" style="margin-top:28px;">Collections</div>
-      <nav class="nav">
+      <nav class="nav" id="collectionsNav">
         <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>Research</button>
         <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>University</button>
         <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>Projects</button>
         <button onclick="showToast('Collections — coming next')"><span class="nav-icon">□</span>Notes</button>
       </nav>
-
       <div class="sidebar-bottom">
         <div class="system">
-          <span>CHORA CORE</span>
-          <span class="status"><i class="status-dot"></i>online</span>
+          <span id="sysName">CHORA CORE</span>
+          <span class="status"><i class="status-dot" id="statusDot"></i><span id="statusLabel">online</span></span>
         </div>
       </div>
     </aside>
@@ -919,45 +800,13 @@
             CHORA unifies documents, concepts and relations into a single navigable
             semantic space. The archive is the source. Everything else grows from it.
           </p>
-
-          <div class="metrics">
-            <div class="metric">
-              <div class="metric-value">2,481</div>
-              <div class="metric-label">Documents</div>
-            </div>
-            <div class="metric">
-              <div class="metric-value">18,392</div>
-              <div class="metric-label">Concepts</div>
-            </div>
-            <div class="metric">
-              <div class="metric-value">4,921</div>
-              <div class="metric-label">Entities</div>
-            </div>
-          </div>
+          <div class="metrics" id="metrics"></div>
         </div>
-
         <div class="section-heading">
           <h2>Recently explored</h2>
-          <span>Last 7 days</span>
+          <span id="recentLabel">Loading...</span>
         </div>
-
-        <div class="recent-grid">
-          <article class="recent-item" onclick="openDocument('SourceZero GWM')">
-            <div class="recent-type">Research · Markdown</div>
-            <h3>SourceZero GWM</h3>
-            <p>Modular Neural Cognitive Architecture</p>
-          </article>
-          <article class="recent-item" onclick="openDocument('Oracle Architecture')">
-            <div class="recent-type">Research · Markdown</div>
-            <h3>Oracle Architecture</h3>
-            <p>Memory, graph and semantic retrieval</p>
-          </article>
-          <article class="recent-item" onclick="openDocument('CHORA Architecture')">
-            <div class="recent-type">System · Markdown</div>
-            <h3>CHORA Architecture</h3>
-            <p>Semantic space and knowledge model</p>
-          </article>
-        </div>
+        <div class="recent-grid" id="recentGrid"></div>
       </section>
 
       <!-- ARCHIVE -->
@@ -965,45 +814,14 @@
         <div class="eyebrow">Corpus</div>
         <h1>Archive</h1>
         <p class="lead">Every document in one place. The physical archive remains simple; CHORA adds structure on top of it.</p>
-
         <div class="toolbar">
-          <div class="filters">
-            <button class="filter active">All</button>
-            <button class="filter">Research</button>
-            <button class="filter">University</button>
-            <button class="filter">Projects</button>
+          <div class="filters" id="filterBar">
+            <button class="filter active" data-filter="">All</button>
           </div>
           <button class="filter" onclick="showToast('Import pipeline ready')">＋ Import</button>
         </div>
-
         <div class="archive-table" id="archiveTable">
-          <div class="row header">
-            <div>Name</div><div>Type</div><div>Updated</div><div>Collection</div>
-          </div>
-          <div class="row" onclick="openDocument('SourceZero GWM')">
-            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">SourceZero GWM</div><div class="subtle">/research/sourcezero/</div></div></div>
-            <div class="subtle">Markdown</div><div class="subtle">Today</div><div class="subtle">Research</div>
-          </div>
-          <div class="row" onclick="openDocument('Oracle Architecture')">
-            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">Oracle Architecture</div><div class="subtle">/research/oracle/</div></div></div>
-            <div class="subtle">Markdown</div><div class="subtle">Yesterday</div><div class="subtle">Research</div>
-          </div>
-          <div class="row" onclick="openDocument('CHORA Architecture')">
-            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">CHORA Architecture</div><div class="subtle">/system/chora/</div></div></div>
-            <div class="subtle">Markdown</div><div class="subtle">Sep 4</div><div class="subtle">Projects</div>
-          </div>
-          <div class="row" onclick="openDocument('University Notes — Algorithms')">
-            <div class="doc-name"><div class="doc-icon">PDF</div><div><div class="doc-title">University Notes — Algorithms</div><div class="subtle">/university/algorithms/</div></div></div>
-            <div class="subtle">PDF</div><div class="subtle">Sep 3</div><div class="subtle">University</div>
-          </div>
-          <div class="row" onclick="openDocument('AI Architecture Notes')">
-            <div class="doc-name"><div class="doc-icon">TXT</div><div><div class="doc-title">AI Architecture Notes</div><div class="subtle">/notes/ai/</div></div></div>
-            <div class="subtle">Text</div><div class="subtle">Sep 2</div><div class="subtle">Notes</div>
-          </div>
-          <div class="row" onclick="openDocument('World Model Research')">
-            <div class="doc-name"><div class="doc-icon">MD</div><div><div class="doc-title">World Model Research</div><div class="subtle">/research/world-models/</div></div></div>
-            <div class="subtle">Markdown</div><div class="subtle">Aug 31</div><div class="subtle">Research</div>
-          </div>
+          <div class="row header"><div>Name</div><div>Type</div><div>Date</div><div>Collection</div></div>
         </div>
       </section>
 
@@ -1012,39 +830,9 @@
         <div class="eyebrow">Relations</div>
         <h1>Graph</h1>
         <p class="lead">A structural view of the relationships emerging from the archive.</p>
-
         <div class="graph-shell">
-          <svg class="graph-svg" viewBox="0 0 1000 610" preserveAspectRatio="xMidYMid meet">
-            <path class="edge" d="M500 305 L300 180 M500 305 L700 175 M500 305 L280 420 M500 305 L720 430 M300 180 L160 305 M700 175 L840 295 M280 420 L430 505 M720 430 L850 490 M300 180 L700 175" />
-            <g class="node core" transform="translate(500 305)" onclick="openDocument('CHORA')">
-              <circle r="56"></circle><text>CHORA</text>
-            </g>
-            <g class="node" transform="translate(300 180)" onclick="openDocument('SourceZero GWM')">
-              <circle r="42"></circle><text>SourceZero</text>
-            </g>
-            <g class="node" transform="translate(700 175)">
-              <circle r="43"></circle><text>World Model</text>
-            </g>
-            <g class="node" transform="translate(280 420)">
-              <circle r="42"></circle><text>Oracle</text>
-            </g>
-            <g class="node" transform="translate(720 430)">
-              <circle r="45"></circle><text>Knowledge</text>
-            </g>
-            <g class="node" transform="translate(160 305)">
-              <circle r="31"></circle><text>GWM</text>
-            </g>
-            <g class="node" transform="translate(840 295)">
-              <circle r="34"></circle><text>Planning</text>
-            </g>
-            <g class="node" transform="translate(430 505)">
-              <circle r="32"></circle><text>Memory</text>
-            </g>
-            <g class="node" transform="translate(850 490)">
-              <circle r="31"></circle><text>Graph</text>
-            </g>
-          </svg>
-          <div class="graph-info">9 nodes · 9 relations · semantic view</div>
+          <div id="graph-container"></div>
+          <div class="graph-info" id="graphInfo">Loading...</div>
         </div>
       </section>
 
@@ -1053,15 +841,7 @@
         <div class="eyebrow">Semantic Layer</div>
         <h1>Concepts</h1>
         <p class="lead">Concepts are not folders. They are recurring semantic structures extracted from the corpus.</p>
-
-        <div class="concept-grid">
-          <article class="concept"><div class="concept-index">01</div><h3>World Model</h3><p>47 documents · 132 relations</p><div class="concept-bar"><i style="--w:82%"></i></div></article>
-          <article class="concept"><div class="concept-index">02</div><h3>Artificial Intelligence</h3><p>83 documents · 218 relations</p><div class="concept-bar"><i style="--w:96%"></i></div></article>
-          <article class="concept"><div class="concept-index">03</div><h3>Knowledge Graph</h3><p>31 documents · 77 relations</p><div class="concept-bar"><i style="--w:61%"></i></div></article>
-          <article class="concept"><div class="concept-index">04</div><h3>Grounding</h3><p>19 documents · 54 relations</p><div class="concept-bar"><i style="--w:43%"></i></div></article>
-          <article class="concept"><div class="concept-index">05</div><h3>Memory</h3><p>42 documents · 104 relations</p><div class="concept-bar"><i style="--w:69%"></i></div></article>
-          <article class="concept"><div class="concept-index">06</div><h3>Planning</h3><p>27 documents · 68 relations</p><div class="concept-bar"><i style="--w:54%"></i></div></article>
-        </div>
+        <div class="concept-grid" id="conceptGrid"></div>
       </section>
 
       <!-- TIMELINE -->
@@ -1069,19 +849,7 @@
         <div class="eyebrow">Temporal Layer</div>
         <h1>Timeline</h1>
         <p class="lead">A chronological perspective over the evolution of the archive and its ideas.</p>
-
-        <div class="timeline">
-          <div class="year">
-            <div class="year-label">2026</div>
-            <div class="event"><div class="event-date">SEP 06</div><div><div class="event-title">CHORA 2.0</div><div class="event-description">Unified semantic archive and interface redesign.</div></div></div>
-            <div class="event"><div class="event-date">SEP 04</div><div><div class="event-title">CHORA Architecture</div><div class="event-description">Definition of the semantic archive model.</div></div></div>
-            <div class="event"><div class="event-date">AUG 18</div><div><div class="event-title">Oracle Research</div><div class="event-description">Research into memory, graph and AI orchestration.</div></div></div>
-          </div>
-          <div class="year">
-            <div class="year-label">ORIGIN</div>
-            <div class="event"><div class="event-date">EARLIER</div><div><div class="event-title">The Archive</div><div class="event-description">The first collection of notes, research and technical documents.</div></div></div>
-          </div>
-        </div>
+        <div class="timeline" id="timelineContainer"></div>
       </section>
     </main>
   </div>
@@ -1099,26 +867,10 @@
         <div class="breadcrumb"><span>ARCHIVE</span><span>/</span><strong id="modalTitle">Document</strong></div>
         <button class="icon-button" onclick="closeDocument()">×</button>
       </div>
-      <div class="document-body">
-        <div class="doc-meta">Markdown · Research</div>
-        <h2 id="documentHeading">SourceZero GWM</h2>
-        <p>
-          This is the document reading surface of CHORA. In the real system this area
-          is populated directly from the normalized archive, while semantic metadata,
-          concepts and relations remain available around the document.
-        </p>
-        <p>
-          The original document is preserved as the primary source. Everything derived
-          by CHORA — embeddings, concepts, entities and inferred relations — belongs
-          to a separate semantic layer and can be regenerated without changing the source.
-        </p>
-        <blockquote>
-          The document is the atom. The graph is the relation. The semantic space is the continuum.
-        </blockquote>
-        <p>
-          This separation keeps the archive deterministic and lets intelligence operate
-          on top of CHORA instead of becoming a dependency of the archive itself.
-        </p>
+      <div class="document-body" id="documentBody">
+        <div class="doc-meta" id="docMeta">Loading...</div>
+        <h2 id="documentHeading">Loading...</h2>
+        <div id="docContent"></div>
       </div>
     </article>
   </div>
@@ -1126,7 +878,7 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const PENELOPE_API = 'http://localhost:5000';
+    const PENELOPE_API = window.location.origin + '/penelope';
     const ORACLE_API = window.location.origin;
 
     const buttons = document.querySelectorAll('[data-page]');
@@ -1136,8 +888,11 @@
     const overlay = document.getElementById('overlay');
     const modalTitle = document.getElementById('modalTitle');
     const documentHeading = document.getElementById('documentHeading');
-    const statusDot = document.querySelector('.status-dot');
-    const statusSystem = document.querySelector('.system span:first-child');
+    const docMeta = document.getElementById('docMeta');
+    const docContent = document.getElementById('docContent');
+    const statusDot = document.getElementById('statusDot');
+    const statusLabel = document.getElementById('statusLabel');
+    const sysName = document.getElementById('sysName');
     let toastTimer;
 
     // ─── Navigation ────────────────────────────────────────────
@@ -1147,10 +902,7 @@
       pageTitle.textContent = page.charAt(0).toUpperCase() + page.slice(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
-    buttons.forEach(button => {
-      button.addEventListener('click', () => navigate(button.dataset.page));
-    });
+    buttons.forEach(b => b.addEventListener('click', () => navigate(b.dataset.page)));
 
     // ─── Search ────────────────────────────────────────────────
     searchInput.addEventListener('keydown', async event => {
@@ -1158,22 +910,23 @@
         const q = searchInput.value.trim();
         navigate('archive');
         try {
-          const resp = await fetch(PENELOPE_API + '/api/search?q=' + encodeURIComponent(q) + '&top=20');
+          const resp = await fetch(PENELOPE_API + '/api/search?q=' + encodeURIComponent(q) + '&top=30');
           if (resp.ok) {
             const data = await resp.json();
             if (data.results && data.results.length > 0) {
               renderArchiveTable(data.results.map(r => ({
+                id: r.node_id || '',
                 label: r.file_name || r.node_id || q,
-                type: (r.mime_type || '').split('/').pop() || 'Unknown',
+                type: r.type || (r.mime_type || '').split('/').pop() || 'File',
                 path: r.file_path || '',
-                id: r.node_id || ''
+                created_at: ''
               })));
               showToast('Found ' + data.results.length + ' results for "' + q + '"');
               return;
             }
           }
         } catch(e) {}
-        showToast('Search: ' + q);
+        showToast('No results for "' + q + '"');
       }
     });
 
@@ -1184,30 +937,81 @@
       currentDocId = docId || null;
       modalTitle.textContent = name;
       documentHeading.textContent = name;
-
-      // Try fetching document details from Penelope
-      if (docId) {
-        try {
-          const resp = await fetch(PENELOPE_API + '/api/nodes/' + encodeURIComponent(docId));
-          if (resp.ok) {
-            const data = await resp.json();
-            const n = data.node || {};
-            const meta = n.metadata || {};
-            const file = n.file || {};
-            const metaEl = document.querySelector('.document-body .doc-meta');
-            if (metaEl) {
-              metaEl.textContent = (file.mime_type || n.type || 'Document') + ' \u00B7 ' + (file.path || '');
-            }
-            const bodyEl = document.querySelector('.document-body p');
-            if (bodyEl && n.label) {
-              bodyEl.textContent = 'Document: ' + n.label + '. Metadata extracted by Penelope knowledge graph.';
-            }
-          }
-        } catch(e) {}
-      }
-
+      docMeta.textContent = 'Loading...';
+      docContent.innerHTML = '<p>Loading document details...</p>';
       overlay.classList.add('open');
       document.body.style.overflow = 'hidden';
+
+      if (!docId) return;
+
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/nodes/' + encodeURIComponent(docId));
+        if (!resp.ok) throw new Error('Not found');
+        const data = await resp.json();
+        const n = data.node || {};
+        const meta = n.metadata || {};
+        const file = n.file || {};
+        const incoming = data.incoming || [];
+        const outgoing = data.outgoing || [];
+
+        // Meta line
+        const type = n.type || 'Document';
+        let metaParts = [type];
+        if (file.mime_type) metaParts.push(file.mime_type);
+        if (file.path) metaParts.push(file.path);
+
+        docMeta.textContent = metaParts.join(' · ');
+
+        // Build content
+        let html = '';
+
+        // Description from metadata
+        if (meta.description) {
+          html += '<p>' + escapeHtml(meta.description) + '</p>';
+        }
+
+        // File details
+        if (file.path || file.size_bytes || file.sha256) {
+          html += '<div class="rule"></div><div style="font-family:Inter,sans-serif;font-size:13px">';
+          html += '<div class="meta-grid">';
+          if (file.path) html += '<span class="key">Path</span><span>' + escapeHtml(file.path) + '</span>';
+          if (file.device) html += '<span class="key">Device</span><span>' + escapeHtml(file.device) + '</span>';
+          if (file.size_bytes) html += '<span class="key">Size</span><span>' + formatBytes(file.size_bytes) + '</span>';
+          if (file.mime_type) html += '<span class="key">MIME</span><span>' + escapeHtml(file.mime_type) + '</span>';
+          if (n.created_at) html += '<span class="key">Created</span><span>' + escapeHtml(n.created_at) + '</span>';
+          if (file.sha256) html += '<span class="key">SHA-256</span><span style="font-size:10px">' + escapeHtml(file.sha256) + '</span>';
+          html += '</div></div>';
+        }
+
+        // Relations
+        if (incoming.length > 0 || outgoing.length > 0) {
+          html += '<div class="rule"></div><div style="font-family:Inter,sans-serif;font-size:13px">';
+          html += '<h3 style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--accent)">Relations</h3>';
+          html += '<div class="meta-grid">';
+          incoming.forEach(e => {
+            html += '<span class="key">← ' + escapeHtml(e.relation) + '</span><span><a href="#" onclick="openDocument(\'' + escapeHtml(e.source_label || e.source_id) + '\',\'' + escapeHtml(e.source_id) + '\');return false" style="color:var(--accent)">' + escapeHtml(e.source_label || e.source_id.slice(0,12)) + '</a></span>';
+          });
+          outgoing.forEach(e => {
+            html += '<span class="key">→ ' + escapeHtml(e.relation) + '</span><span><a href="#" onclick="openDocument(\'' + escapeHtml(e.target_label || e.target_id) + '\',\'' + escapeHtml(e.target_id) + '\');return false" style="color:var(--accent)">' + escapeHtml(e.target_label || e.target_id.slice(0,12)) + '</a></span>';
+          });
+          html += '</div></div>';
+        }
+
+        // Raw metadata
+        if (Object.keys(meta).length > 0 && !meta.description) {
+          html += '<div class="rule"></div><div style="font-family:Inter,sans-serif;font-size:12px;color:var(--muted)">';
+          html += '<pre style="overflow-x:auto">' + escapeHtml(JSON.stringify(meta, null, 2)) + '</pre>';
+          html += '</div>';
+        }
+
+        if (!html) {
+          html = '<p>' + escapeHtml(name) + '</p><p style="color:var(--muted)">No additional metadata available.</p>';
+        }
+
+        docContent.innerHTML = html;
+      } catch(e) {
+        docContent.innerHTML = '<p>' + escapeHtml(name) + '</p><p style="color:var(--muted)">Document details unavailable.</p>';
+      }
     }
 
     function closeDocument() {
@@ -1215,14 +1019,8 @@
       document.body.style.overflow = '';
       currentDocId = null;
     }
-
-    function closeIfBackdrop(event) {
-      if (event.target === overlay) closeDocument();
-    }
-
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') closeDocument();
-    });
+    function closeIfBackdrop(event) { if (event.target === overlay) closeDocument(); }
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDocument(); });
 
     function showToast(message) {
       const toast = document.getElementById('toast');
@@ -1232,151 +1030,343 @@
       toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
     }
 
-    // ─── Filters ──────────────────────────────────────────────
-    document.querySelectorAll('.filter').forEach(filter => {
-      filter.addEventListener('click', () => {
-        document.querySelectorAll('.filter').forEach(f => f.classList.remove('active'));
-        filter.classList.add('active');
-        const coll = filter.textContent.trim();
-        if (coll !== 'All') {
-          showToast('Filter: ' + coll);
-        }
-      });
-    });
+    // ─── Formatting ───────────────────────────────────────────
+    function formatBytes(bytes) {
+      if (!bytes) return '—';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
 
-    // ─── Data fetching ────────────────────────────────────────
+    function escapeHtml(text) {
+      if (!text) return '';
+      const d = document.createElement('div');
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    // ─── OVERVIEW — Metrics ───────────────────────────────────
     async function fetchStats() {
       try {
         const resp = await fetch(PENELOPE_API + '/api/stats');
         if (!resp.ok) throw new Error('Penelope not available');
         const data = await resp.json();
 
-        const docs = data.nodes_by_type?.File || data.total_nodes || 0;
-        const persons = data.nodes_by_type?.Person || 0;
-        const locations = data.nodes_by_type?.Location || 0;
-        const projects = data.nodes_by_type?.Project || 0;
+        const byType = data.nodes_by_type || {};
+        const docs = byType.File || 0;
+        const persons = byType.Person || 0;
+        const locations = byType.Location || 0;
+        const events = byType.Event || 0;
+        const projects = byType.Project || 0;
+        const concepts = persons + locations + events + projects;
         const edges = data.total_edges || 0;
+        const total = data.total_nodes || 0;
 
-        const metrics = document.querySelectorAll('.metric-value');
-        if (metrics.length >= 3) {
-          metrics[0].textContent = docs.toLocaleString();
-          metrics[1].textContent = (persons + locations || data.total_nodes - docs || 0).toLocaleString();
-          metrics[2].textContent = (persons || 0).toLocaleString();
-        }
+        // Metrics row
+        const metricsEl = document.getElementById('metrics');
+        metricsEl.innerHTML = '';
+        const metricDefs = [
+          { val: docs.toLocaleString(), label: 'Documents' },
+          { val: edges.toLocaleString(), label: 'Relations' },
+          { val: persons.toLocaleString(), label: 'People' },
+          { val: locations.toLocaleString(), label: 'Locations' },
+          { val: events.toLocaleString(), label: 'Events' },
+          { val: projects.toLocaleString(), label: 'Projects' },
+        ];
+        // Show only first 3 on narrow screens, 6 on wide
 
-        // Update graph info
-        const graphInfo = document.querySelector('.graph-info');
-        if (graphInfo) {
-          const nodeCount = data.total_nodes || 0;
-          graphInfo.textContent = nodeCount + ' nodes \u00B7 ' + edges + ' relations \u00B7 semantic view';
-        }
+        metricsEl.style.gridTemplateColumns = 'repeat(' + Math.min(metricDefs.length, 3) + ', 1fr)';
+        metricsEl.innerHTML = metricDefs.slice(0, 6).map(m =>
+          '<div class="metric"><div class="metric-value">' + m.val + '</div><div class="metric-label">' + m.label + '</div></div>'
+        ).join('');
 
         return data;
-      } catch (e) {
-        console.log('Penelope API not available, using static data');
+      } catch(e) {
+        document.getElementById('metrics').innerHTML = '<div class="metric" style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted)">Penelope API not available</div>';
         return null;
       }
     }
 
+    // ─── OVERVIEW — Recently explored ─────────────────────────
+    async function fetchRecent() {
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/nodes?limit=6');
+        if (!resp.ok) throw new Error('Not available');
+        const data = await resp.json();
+        const nodes = data.nodes || [];
+
+        document.getElementById('recentLabel').textContent = nodes.length > 0 ? 'Last indexed' : 'No items';
+
+        let html = '';
+        nodes.forEach(n => {
+          const meta = n.metadata || {};
+          const desc = meta.description || '';
+          const type = n.type || 'File';
+          const label = n.label || n.id.slice(0, 8);
+          html += '<article class="recent-item" onclick="openDocument(\'' + escapeHtml(label) + '\',\'' + escapeHtml(n.id) + '\')">' +
+            '<div class="recent-type">' + escapeHtml(type) + '</div>' +
+            '<h3>' + escapeHtml(label).slice(0, 40) + '</h3>' +
+            (desc ? '<p>' + escapeHtml(desc).slice(0, 80) + '</p>' : '') +
+            '</article>';
+        });
+        document.getElementById('recentGrid').innerHTML = html || '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted)">No nodes indexed yet.</div>';
+      } catch(e) {
+        document.getElementById('recentLabel').textContent = '—';
+        document.getElementById('recentGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted)">Penelope not available</div>';
+      }
+    }
+
+    // ─── ARCHIVE — Table ──────────────────────────────────────
+    let allNodes = [];
+    let currentFilter = '';
+
     function renderArchiveTable(nodes) {
       const table = document.getElementById('archiveTable');
-      if (!table) return;
+      const filtered = currentFilter ? nodes.filter(n => n.type === currentFilter) : nodes;
+      allNodes = nodes;
 
-      // Keep header row
-      let html = '<div class="row header"><div>Name</div><div>Type</div><div>Updated</div><div>Collection</div></div>';
+      let html = '<div class="row header"><div>Name</div><div>Type</div><div>Date</div><div>Collection</div></div>';
 
-      if (!nodes || nodes.length === 0) {
-        html += '<div class="row" style="cursor:default;justify-content:center;padding:30px;color:var(--muted);grid-template-columns:1fr"><div>No documents indexed. Start Penelope scan.</div></div>';
+      if (!filtered || filtered.length === 0) {
+        html += '<div class="row" style="cursor:default;justify-content:center;padding:30px;color:var(--muted);grid-template-columns:1fr"><div>No documents matching filter.</div></div>';
         table.innerHTML = html;
         return;
       }
 
-      nodes.slice(0, 20).forEach(n => {
-        const label = n.label || n.id || 'Unknown';
+      filtered.slice(0, 30).forEach(n => {
+        const label = n.label || n.id.slice(0, 12);
         const type = n.type || 'File';
-        const path = n.path || n.file_path || '';
+        const path = n.path || '';
         const ext = (path.match(/\.(\w+)$/) || ['', type])[1].toUpperCase().slice(0, 4);
         const date = n.created_at ? n.created_at.slice(0, 10) : '—';
+        const collection = n.device || (n.type === 'Project' ? 'Project' : '—');
 
-        html += '<div class="row" onclick="openDocument(\'' + escapeHtml(label) + '\', \'' + escapeHtml(n.id || '') + '\')">' +
-          '<div class="doc-name"><div class="doc-icon">' + escapeHtml(ext) + '</div><div><div class="doc-title">' + escapeHtml(label) + '</div><div class="subtle">' + escapeHtml(path.slice(0, 50)) + '</div></div></div>' +
+        html += '<div class="row" onclick="openDocument(\'' + escapeHtml(label) + '\', \'' + escapeHtml(n.id) + '\')">' +
+          '<div class="doc-name"><div class="doc-icon">' + escapeHtml(ext) + '</div><div>' +
+          '<div class="doc-title">' + escapeHtml(label).slice(0, 50) + '</div>' +
+          '<div class="subtle">' + escapeHtml(path.slice(0, 50)) + '</div></div></div>' +
           '<div class="subtle">' + escapeHtml(type) + '</div>' +
           '<div class="subtle">' + escapeHtml(date) + '</div>' +
-          '<div class="subtle">' + (n.collection || '—') + '</div></div>';
+          '<div class="subtle">' + escapeHtml(collection) + '</div></div>';
       });
+
+      if (filtered.length > 30) {
+        html += '<div class="row" style="cursor:default;grid-template-columns:1fr;justify-content:center;text-align:center;color:var(--muted)">Showing 30 of ' + filtered.length + '</div>';
+      }
 
       table.innerHTML = html;
     }
 
     async function fetchArchive() {
       try {
-        const resp = await fetch(PENELOPE_API + '/api/nodes?limit=50');
+        const resp = await fetch(PENELOPE_API + '/api/nodes?limit=100');
         if (!resp.ok) throw new Error('Penelope not available');
         const data = await resp.json();
-        renderArchiveTable(data.nodes || []);
-      } catch (e) {
-        console.log('Penelope not available, keeping static archive');
+        const nodes = data.nodes || [];
+
+        // Build filter buttons from types
+        const types = [...new Set(nodes.map(n => n.type).filter(Boolean))];
+        const filterBar = document.getElementById('filterBar');
+        types.forEach(t => {
+          const btn = document.createElement('button');
+          btn.className = 'filter';
+          btn.dataset.filter = t;
+          btn.textContent = t;
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#filterBar .filter').forEach(f => f.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = t;
+            renderArchiveTable(nodes);
+          });
+          filterBar.appendChild(btn);
+        });
+
+        renderArchiveTable(nodes);
+      } catch(e) {
+        document.getElementById('archiveTable').innerHTML =
+          '<div class="row header"><div>Name</div><div>Type</div><div>Date</div><div>Collection</div></div>' +
+          '<div class="row" style="cursor:default;justify-content:center;padding:30px;color:var(--muted);grid-template-columns:1fr"><div>Penelope not available</div></div>';
       }
     }
 
+    // ─── GRAPH ────────────────────────────────────────────────
+    let graphNetwork = null;
+
+    async function fetchGraph() {
+      const container = document.getElementById('graph-container');
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Loading graph...</div>';
+
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/graph?limit=300');
+        if (!resp.ok) throw new Error('Not available');
+        const data = await resp.json();
+        const edges = data.edges || [];
+        const nodes = data.nodes || [];
+
+        if (nodes.length === 0) {
+          container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Graph is empty.</div>';
+          return;
+        }
+
+        const options = {
+          nodes: {
+            font: { color: '#171816', size: 12 },
+            borderWidth: 1,
+            scaling: { min: 8, max: 30 },
+            color: { background: '#fbfbf9', border: '#c9c9c2', highlight: { background: '#e2e9e6', border: '#526b63' } }
+          },
+          edges: {
+            font: { size: 9, color: '#73756f' },
+            color: { color: '#c6c9c3', highlight: '#526b63', opacity: 0.6 },
+            smooth: { type: 'continuous' },
+            width: 0.8
+          },
+          physics: {
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -50, centralGravity: 0.005, springLength: 180, springConstant: 0.02 },
+            stabilization: { iterations: 80 }
+          },
+          interaction: { hover: true, tooltipDelay: 150, navigationButtons: true, keyboard: true },
+          groups: {
+            File: { color: { background: '#d0e0f0', border: '#6a9fdb' }, shape: 'box' },
+            Person: { color: { background: '#f5d0d0', border: '#c0392b' }, shape: 'dot', size: 20 },
+            Location: { color: { background: '#d0f0d0', border: '#27ae60' }, shape: 'triangle' },
+            Project: { color: { background: '#f5e6c8', border: '#d68910' }, shape: 'star', size: 22 },
+            Event: { color: { background: '#e0d0f5', border: '#8e44ad' }, shape: 'square' },
+          }
+        };
+
+        if (graphNetwork) graphNetwork.destroy();
+        graphNetwork = new vis.Network(container, {
+          nodes: new vis.DataSet(nodes),
+          edges: new vis.DataSet(edges)
+        }, options);
+
+        graphNetwork.on('click', function(params) {
+          if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const nodeData = nodes.find(n => n.id === nodeId);
+            const label = nodeData ? (nodeData.label || nodeId) : nodeId;
+            openDocument(label, nodeId);
+          }
+        });
+
+        document.getElementById('graphInfo').textContent =
+          nodes.length + ' nodes · ' + edges.length + ' relations';
+      } catch(e) {
+        container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Graph API not available.</div>';
+        document.getElementById('graphInfo').textContent = 'Graph unavailable';
+      }
+    }
+
+    // ─── CONCEPTS ─────────────────────────────────────────────
     async function fetchConcepts() {
       try {
         const resp = await fetch(PENELOPE_API + '/api/stats');
         if (!resp.ok) throw new Error('Penelope not available');
         const data = await resp.json();
-        const grid = document.querySelector('.concept-grid');
-        if (!grid) return;
-
+        const grid = document.getElementById('conceptGrid');
         const byType = data.nodes_by_type || {};
+        const edgesByRel = data.edges_by_relation || {};
+
+        // Build concept cards from node types (excluding File)
         const entries = Object.entries(byType).filter(([k]) => k !== 'File');
         const maxCount = Math.max(...entries.map(([,v]) => v), 1);
 
+        // Add relation-based "concepts" from edges
+        const relationCards = Object.entries(edgesByRel).map(([rel, count], i) => ({
+          name: rel,
+          count: count,
+          sub: 'relations',
+          pct: Math.round((count / Math.max(...Object.values(edgesByRel), 1)) * 100)
+        }));
+
         let html = '';
+
+        // Node type cards
         entries.forEach(([type, count], i) => {
           const pct = Math.round((count / maxCount) * 100);
           html += '<article class="concept"><div class="concept-index">' +
             String(i + 1).padStart(2, '0') + '</div><h3>' + escapeHtml(type) + '</h3><p>' +
-            count + ' nodes</p><div class="concept-bar"><i style="--w:' + pct + '%"></i></div></article>';
+            count.toLocaleString() + ' nodes</p><div class="concept-bar"><i style="--w:' + pct + '%"></i></div></article>';
         });
 
-        if (entries.length === 0) {
-          html += '<article class="concept" style="grid-column:1/-1;text-align:center;padding:40px"><h3>No concepts yet</h3><p>Run Penelope scan to populate the graph.</p></article>';
+        // Edge relation cards
+        relationCards.forEach((r, i) => {
+          const idx = entries.length + i + 1;
+          html += '<article class="concept"><div class="concept-index">' +
+            String(idx).padStart(2, '0') + '</div><h3>' + escapeHtml(r.name) + '</h3><p>' +
+            r.count.toLocaleString() + ' ' + r.sub + '</p><div class="concept-bar"><i style="--w:' + r.pct + '%"></i></div></article>';
+        });
+
+        if (!html) {
+          html = '<article class="concept" style="grid-column:1/-1;text-align:center;padding:40px"><h3>No concepts yet</h3><p>Run Penelope scan to populate the graph.</p></article>';
         }
+
         grid.innerHTML = html;
-      } catch (e) {
-        console.log('Penelope not available, keeping static concepts');
+      } catch(e) {
+        document.getElementById('conceptGrid').innerHTML =
+          '<article class="concept" style="grid-column:1/-1;text-align:center;padding:40px"><h3>Penelope not available</h3><p>Start the Penelope service.</p></article>';
       }
     }
 
+    // ─── TIMELINE ──────────────────────────────────────────────
     async function fetchTimeline() {
       try {
-        const resp = await fetch(PENELOPE_API + '/api/events/timeline');
-        if (!resp.ok) throw new Error('Penelope not available');
+        const resp = await fetch(PENELOPE_API + '/api/events?limit=100');
+        if (!resp.ok) throw new Error('Not available');
         const data = await resp.json();
-        const timeline = document.querySelector('.timeline');
-        if (!timeline || !data.events) return;
+        const container = document.getElementById('timelineContainer');
 
-        let html = '';
+        if (!data.events || data.events.length === 0) {
+          container.innerHTML = '<div style="padding:30px;color:var(--muted);text-align:center">No events found.</div>';
+          return;
+        }
+
         const grouped = {};
         data.events.forEach(ev => {
-          const year = (ev.date || '').slice(0, 4) || 'Origin';
+          const year = ev.year || (ev.date || '').slice(0, 4) || 'Origin';
           if (!grouped[year]) grouped[year] = [];
           grouped[year].push(ev);
         });
 
-        Object.entries(grouped).forEach(([year, events]) => {
+        let html = '';
+        Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a)).forEach(([year, events]) => {
           html += '<div class="year"><div class="year-label">' + escapeHtml(year) + '</div>';
-          events.forEach(ev => {
-            html += '<div class="event"><div class="event-date">' + escapeHtml((ev.date || '').slice(5, 10) || ev.date) + '</div>' +
-              '<div><div class="event-title">' + escapeHtml(ev.title || ev.label || 'Event') + '</div>' +
-              '<div class="event-description">' + escapeHtml(ev.description || '') + '</div></div></div>';
+          events.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+          events.slice(0, 15).forEach(ev => {
+            const dateStr = ev.date ? ev.date.slice(5) : '';
+            const label = ev.label || ev.display_name || 'Event';
+            const desc = (ev.file_count ? ev.file_count + ' files' : '');
+            html += '<div class="event"><div class="event-date">' + escapeHtml(dateStr) + '</div>' +
+              '<div><div class="event-title">' + escapeHtml(label) + '</div>' +
+              (desc ? '<div class="event-description">' + escapeHtml(desc) + '</div>' : '') + '</div></div>';
           });
           html += '</div>';
         });
 
-        if (Object.keys(grouped).length > 0) timeline.innerHTML = html;
-      } catch (e) {
-        console.log('Timeline not available, keeping static data');
+        container.innerHTML = html;
+      } catch(e) {
+        document.getElementById('timelineContainer').innerHTML =
+          '<div style="padding:30px;color:var(--muted);text-align:center">Timeline not available.</div>';
+      }
+    }
+
+    // ─── Collections sidebar ──────────────────────────────────
+    async function fetchCollections() {
+      try {
+        const resp = await fetch(PENELOPE_API + '/api/projects');
+        if (!resp.ok) throw new Error('Not available');
+        const data = await resp.json();
+        const nav = document.getElementById('collectionsNav');
+        if (data.projects && data.projects.length > 0) {
+          nav.innerHTML = data.projects.slice(0, 8).map(p =>
+            '<button onclick="showToast(\'Collection: ' + escapeHtml(p.label) + '\')"><span class="nav-icon">□</span>' +
+            escapeHtml(p.label).slice(0, 20) + '</button>'
+          ).join('');
+        }
+      } catch(e) {
+        // Keep static names
       }
     }
 
@@ -1387,38 +1377,36 @@
         if (resp.ok) {
           statusDot.style.background = 'var(--accent)';
           statusDot.style.boxShadow = '0 0 0 4px var(--accent-soft)';
-          if (statusSystem) statusSystem.textContent = 'CHORA CORE';
+          statusLabel.textContent = 'online';
+          sysName.textContent = 'CHORA CORE';
+        } else {
+          throw new Error('Not healthy');
         }
-      } catch (e) {
+      } catch(e) {
         statusDot.style.background = '#c0392b';
         statusDot.style.boxShadow = '0 0 0 4px rgba(192,57,43,.15)';
-        if (statusSystem) statusSystem.textContent = 'OFFLINE';
+        statusLabel.textContent = 'offline';
+        sysName.textContent = 'CHORA';
       }
-
       // Penelope status
       try {
         const pResp = await fetch(PENELOPE_API + '/api/stats');
         if (!pResp.ok) throw new Error('offline');
-      } catch (e) {
-        showToast('Penelope graph API not available at :5000');
+      } catch(e) {
+        if (document.querySelector('.brand-name'))
+          showToast('Penelope not available');
       }
-    }
-
-    // ─── Utility ──────────────────────────────────────────────
-    function escapeHtml(text) {
-      if (!text) return '';
-      const d = document.createElement('div');
-      d.textContent = text;
-      return d.innerHTML;
     }
 
     // ─── Init ─────────────────────────────────────────────────
     async function init() {
+      checkHealth();
       await fetchStats();
+      fetchRecent();
       fetchArchive();
       fetchConcepts();
       fetchTimeline();
-      checkHealth();
+      fetchCollections();
       setInterval(checkHealth, 30000);
     }
 

@@ -1396,12 +1396,13 @@ from pathlib import Path as _Path
 _chora_index_path = _Path(__file__).resolve().parent.parent / "index.html"
 
 class _ChoraASGIWrapper:
-    """ASGI wrapper: serves index.html at GET /, delegates everything else."""
+    """ASGI wrapper: serves index.html at GET /, proxies /penelope/* to :5000."""
     def __init__(self, inner):
         self.inner = inner
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["method"] == "GET":
             path = scope.get("path", "").rstrip("/") or "/"
+            # Serve CHORA UI at root
             if path in ("/", "/ui"):
                 from fastapi.responses import FileResponse, JSONResponse
                 idx = _chora_index_path
@@ -1409,6 +1410,53 @@ class _ChoraASGIWrapper:
                        JSONResponse({"error": "index.html not found"}, status_code=404)
                 await resp(scope, receive, send)
                 return
+        # Proxy /penelope/* requests to localhost:5000
+        if scope["type"] == "http" and scope["path"].startswith("/penelope"):
+            import httpx
+            target_path = scope["path"][len("/penelope"):] or "/"
+            method = scope["method"]
+            # Read request body if any
+            body = b""
+            if method in ("POST", "PUT", "PATCH"):
+                more_body = True
+                while more_body:
+                    message = await receive()
+                    body += message.get("body", b"")
+                    more_body = message.get("more_body", False)
+            # Build headers
+            headers = {}
+            for k, v in scope.get("headers", []):
+                key = k.decode("latin-1").lower()
+                if key not in ("host", "content-length", "transfer-encoding"):
+                    headers[key] = v.decode("latin-1")
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.request(
+                        method, "http://localhost:5000" + target_path,
+                        headers=headers,
+                        content=body,
+                        params=scope.get("query_string", b"").decode() or None,
+                    )
+                # Send response back to browser
+                resp_headers = [
+                    (b"content-type", resp.headers.get("content-type", "application/json").encode()),
+                    (b"content-length", str(len(resp.content)).encode()),
+                    (b"access-control-allow-origin", b"*"),
+                ]
+                await send({
+                    "type": "http.response.start",
+                    "status": resp.status_code,
+                    "headers": resp_headers,
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": resp.content,
+                })
+            except Exception as e:
+                from fastapi.responses import JSONResponse
+                err = JSONResponse({"error": str(e)}, status_code=502)
+                await err(scope, receive, send)
+            return
         await self.inner(scope, receive, send)
 
 app = _ChoraASGIWrapper(app)  # type: ignore[assignment]
