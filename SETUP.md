@@ -1,6 +1,6 @@
-# Oracle RUI Edition — Setup Guide
+# CHORA — Setup Guide
 
-This guide walks you through the complete installation and configuration of Oracle RUI Edition.
+This guide walks you through the complete installation and configuration of CHORA.
 
 ---
 
@@ -43,8 +43,8 @@ pip install -r archimede/requirements.txt
 ### 2.1 Clone the repository
 
 ```bash
-git clone <repo-url> oracle-rui-edition
-cd oracle-rui-edition
+git clone <repo-url> chora
+cd chora
 ```
 
 ### 2.2 Create virtual environment
@@ -274,7 +274,7 @@ python run.py --status
 Sample output:
 ```
 +----------------------------------------------------+
-|  Oracle RUI Edition — Diagnostics                  |
+|  Chora — Diagnostics                                |
 +----------------------------------------------------+
 |  Oracle       [OK]  :8100 (v0.5.0)
 |  Penelope     [OK]  :5000 (1247 nodes)

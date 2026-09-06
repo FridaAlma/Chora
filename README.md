@@ -46,8 +46,8 @@ Modular 4-layer OSINT framework for researchers: autonomous agent with memory, k
 ### 1. Clone and install
 
 ```bash
-git clone <repo-url> oracle-rui-edition
-cd oracle-rui-edition
+git clone <repo-url> chora
+cd chora
 
 # Create virtual environment
 python -m venv venv
@@ -176,7 +176,7 @@ Everything is configurable via `.env`. No personal data, no hardcoding.
 
 ## License
 
-Oracle RUI Edition is released for research use. Each researcher configures their own
+Chora is released for research use. Each researcher configures their own
 environment and their own data. The software does not contain, collect, or transmit personal data.
 
 ---

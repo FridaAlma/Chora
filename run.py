@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Oracle RUI Edition — Unified system startup.
+Chora — Unified system startup.
 
-One command to start the entire Oracle RUI ecosystem:
+One command to start the entire Chora ecosystem:
 
   python run.py
 
@@ -183,7 +183,7 @@ def check_status():
     W = 52
     sep = "  +-" + "-" * W + "+"
     print(sep)
-    print("  |  " + "Oracle RUI Edition — Diagnostics".center(W) + "  |")
+    print("  |  " + "Chora — Diagnostics".center(W) + "  |")
     print(sep)
 
     def line(label, ok, text=""):
@@ -254,7 +254,7 @@ def cmd_init():
     """Guided first-time setup."""
     print()
     print("=" * 60)
-    print("Oracle RUI Edition — Guided Setup")
+    print("Chora — Guided Setup")
     print("=" * 60)
     print()
 
@@ -302,7 +302,7 @@ def cmd_init():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Oracle RUI Edition — Unified startup"
+        description="Chora — Unified startup"
     )
     parser.add_argument("--port", type=int, default=8100,
                         help="Oracle Core port (default: 8100)")

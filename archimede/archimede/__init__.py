@@ -15,7 +15,7 @@ from pathlib import Path
 
 # Aggiunge Oracle/ e Archimede/ al path per importare egida (4° strato)
 # e per far funzionare import archimede.
-# Supporta sia la struttura RUI Edition (oracle-rui, penelope) che quella originale (oracle, Penelope).
+# Supporta sia la struttura Chora (oracle-rui, penelope) che quella originale (oracle, Penelope).
 _ARCHIMEDE_ROOT = Path(__file__).resolve().parent.parent
 _ROOT = _ARCHIMEDE_ROOT.parent
 
