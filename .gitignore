@@ -26,6 +26,10 @@ logs/
 # Workspace (runtime)
 **/workspace/
 
+doc/
+
+*.db
+
 # IDE
 .vscode/
 .idea/
@@ -35,4 +39,5 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+oracle-rui/data/*.db
 oracle-rui/data/*.db
