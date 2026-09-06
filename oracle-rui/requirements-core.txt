@@ -10,7 +10,7 @@ agno==2.6.4
 httpx>=0.28.1,<0.30.0
 
 # Server ASGI
-uvicorn>=0.40.0,<0.41.0
+uvicorn>=0.30.0,<0.41.0
 
 # FastAPI
 fastapi>=0.100.0,<0.101.0
