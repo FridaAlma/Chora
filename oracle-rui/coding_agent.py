@@ -488,17 +488,6 @@ agent_os = AgentOS(
 
 app = agent_os.get_app()
 
-# ── Override AgentOS root route with CHORA UI ──────────────────────
-@app.get("/", include_in_schema=False)
-@app.get("/ui", include_in_schema=False)
-async def serve_chora_ui():
-    from fastapi.responses import FileResponse, JSONResponse
-    from pathlib import Path
-    index_path = Path(__file__).resolve().parent.parent / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path))
-    return JSONResponse({"error": "index.html not found"}, status_code=404)
-
 # ── Apply Security Middleware ────────────────────────────────────────
 if API_SECURITY_AVAILABLE:
     # Apply security middleware
@@ -1399,6 +1388,30 @@ async def prometeo_health():
 
     return JSONResponse(status)
 
+
+# ── Wrap ASGI app to serve CHORA UI at root ──────────────────────
+# AgentOS registers its own GET / inside get_app(), which takes precedence.
+# We wrap the ASGI protocol so GET / and /ui are caught before FastAPI.
+from pathlib import Path as _Path
+_chora_index_path = _Path(__file__).resolve().parent.parent / "index.html"
+
+class _ChoraASGIWrapper:
+    """ASGI wrapper: serves index.html at GET /, delegates everything else."""
+    def __init__(self, inner):
+        self.inner = inner
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["method"] == "GET":
+            path = scope.get("path", "").rstrip("/") or "/"
+            if path in ("/", "/ui"):
+                from fastapi.responses import FileResponse, JSONResponse
+                idx = _chora_index_path
+                resp = FileResponse(str(idx)) if idx.exists() else \
+                       JSONResponse({"error": "index.html not found"}, status_code=404)
+                await resp(scope, receive, send)
+                return
+        await self.inner(scope, receive, send)
+
+app = _ChoraASGIWrapper(app)  # type: ignore[assignment]
 
 if __name__ == "__main__":
     import argparse
