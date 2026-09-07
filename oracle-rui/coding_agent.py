@@ -144,7 +144,7 @@ def _check_api_connectivity():
     provider = os.getenv("MODEL_PROVIDER", "openai")
 
     if not api_key:
-        print("[DIAG] API_KEY not set in .env — copy .env.example to .env")
+        # API_KEY is optional — some providers (e.g., Ollama) don't need it
         return
 
     import httpx
@@ -225,7 +225,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Annotated as Annotated_FastAPI
 from pydantic import BaseModel, Field
 
-# ── Tool Repository Bootstrap ─────────────────────────────────
+# ── Tool Repository Bootstrap (optional) ──────────────────────
+_tool_repo = None
+_lifecycle = None
 try:
     sys.path.insert(0, str(BASE_DIR))
     from workspace.tool_repository import ToolRepository
@@ -235,10 +237,12 @@ try:
     if _repo_summary["total_tools"] > 0:
         print(f"[Oracle Bootstrap] Tool Repository: {_repo_summary['total_tools']} tools available")
         _tool_repo.write_index()
+except ModuleNotFoundError:
+    pass  # workspace module is optional
 except Exception as _e:
     print(f"[Oracle Bootstrap] Tool Repository init: {_e}")
 
-# ── Tool Lifecycle Bootstrap ──────────────────────────────────
+# ── Tool Lifecycle Bootstrap (optional) ───────────────────────
 try:
     sys.path.insert(0, str(BASE_DIR))
     from workspace.tool_lifecycle import ToolLifecycleManager
@@ -250,6 +254,8 @@ try:
     _expired = _lifecycle.cleanup_expired()
     if _expired:
         print(f"[Oracle Bootstrap] Cleaned up {len(_expired)} expired tools")
+except ModuleNotFoundError:
+    pass  # workspace module is optional
 except Exception as _e:
     print(f"[Oracle Bootstrap] Lifecycle init: {_e}")
 
@@ -262,16 +268,17 @@ try:
     print(f"[Oracle Bootstrap]   Pattern: {len(_immunity.INJECTION_PATTERNS)} injection + "
           f"{len(_immunity.LEAK_PATTERNS)} leak + {len(_immunity.JAILBREAK_PATTERNS)} jailbreak")
 
-    # Registra l'immunity tool nel lifecycle
-    try:
-        _lifecycle.register(
-            file_path="tools/immunity_guardian.py",
-            purpose="Runtime security guardian for the Oracle agent",
-            tool_type="persistent",
-            depends_on=["tools/immunity_config.json"],
-        )
-    except Exception:
-        pass  # Già registrato
+    # Registra l'immunity tool nel lifecycle (se disponibile)
+    if _lifecycle is not None:
+        try:
+            _lifecycle.register(
+                file_path="tools/immunity_guardian.py",
+                purpose="Runtime security guardian for the Oracle agent",
+                tool_type="persistent",
+                depends_on=["tools/immunity_config.json"],
+            )
+        except Exception:
+            pass  # Già registrato
 
 except Exception as _e:
     print(f"[Oracle Bootstrap] ImmunityGuardian init: {_e}")
