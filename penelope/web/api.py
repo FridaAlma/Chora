@@ -23,10 +23,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
 
+import threading
+
 from penelope.db.mariadb_store import MariaDBStore
 from penelope.db.graph_bridge import GraphBridge
 from penelope.db.chroma_store import ChromaStore
 from penelope.config import settings
+
+
+# Thread-local storage per connessioni MySQL (evita race condition su Flask multi-thread)
+_tls = threading.local()
+
+
+def _get_cursor():
+    """Restituisce un cursore MariaDB dedicato al thread corrente."""
+    if not hasattr(_tls, 'conn'):
+        _tls.conn = MariaDBStore()
+        _tls.conn.connect()
+    return _tls.conn._conn.cursor()
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 logger = logging.getLogger("penelope-web")
@@ -36,14 +51,8 @@ CORS(app)
 
 # ─── Database connection (creata una volta e riusata) ──────────────
 
-db = MariaDBStore()
-bridge = GraphBridge(db)
-
-
-def _get_cursor():
-    """Restituisce un cursore MariaDB (con riconnessione automatica)."""
-    db.connect()
-    return db._conn.cursor()
+_db = MariaDBStore()
+bridge = GraphBridge(_db)
 
 
 # ─── Pagina principale ─────────────────────────────────────────────
