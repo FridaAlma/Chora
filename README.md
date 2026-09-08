@@ -1,5 +1,9 @@
 # CHORA
 
+<p align="center">
+  <img src="./ChoraImage.png" alt="CHORA Logo" width="500"/>
+</p>
+
 Modular 4-layer OSINT framework for researchers: autonomous agent with memory, knowledge graph, identity resolution, and ethical guardrails.
 
 ---
