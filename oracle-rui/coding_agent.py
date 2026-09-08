@@ -1439,12 +1439,22 @@ from pathlib import Path as _Path
 _chora_index_path = _Path(__file__).resolve().parent.parent / "index.html"
 
 class _ChoraASGIWrapper:
-    """ASGI wrapper: serves index.html at GET /, delegates everything else."""
+    """ASGI wrapper: serves index.html at GET /, /ico/* static files, delegates everything else."""
     def __init__(self, inner):
         self.inner = inner
+        self.ico_dir = _Path(__file__).resolve().parent.parent / "ico"
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["method"] == "GET":
             path = scope.get("path", "").rstrip("/") or "/"
+            # Serve static files from ico/ directory (e.g. /ico/ChoraIcon.jpeg)
+            if path.startswith("/ico/"):
+                from fastapi.responses import FileResponse, JSONResponse
+                name = _Path(path).name  # basename only, safe
+                icon = self.ico_dir / name
+                resp = FileResponse(str(icon)) if icon.is_file() else \
+                       JSONResponse({"error": "not found"}, status_code=404)
+                await resp(scope, receive, send)
+                return
             if path in ("/", "/ui"):
                 from fastapi.responses import FileResponse, JSONResponse
                 idx = _chora_index_path
