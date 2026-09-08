@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/ico/ChoraIcon.jpeg" type="image/svg+xml" />
   <title>CHORA — Semantic Archive</title>
   <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
@@ -247,6 +248,14 @@
       background: var(--surface);
       cursor: pointer;
       transition: transform .2s var(--ease), background .2s ease;
+      padding: 0;
+    }
+
+    .icon-button img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 6px;
     }
 
     .icon-button:hover {
@@ -787,7 +796,7 @@
             <span>⌕</span>
             <input id="searchInput" type="search" placeholder="Search archive..." autocomplete="off" />
           </label>
-          <button class="icon-button" onclick="showToast('CHORA is online')" aria-label="System status">◌</button>
+          <button class="icon-button" onclick="showToast('CHORA is online')" aria-label="System status"><img src="/ico/ChoraIcon.jpeg" alt="Online"></button>
         </div>
       </header>
 
