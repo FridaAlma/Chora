@@ -29,7 +29,14 @@ class Quarantine:
     """
 
     def __init__(self, base_dir: str | Path | None = None):
-        self.base_dir = Path(base_dir) if base_dir else Path(EGIDA_QUARANTINE_DIR)
+        if base_dir:
+            self.base_dir = Path(base_dir)
+        else:
+            # Rende assoluto: se il path è relativo, risolve rispetto alla radice di Egida
+            base = Path(EGIDA_QUARANTINE_DIR)
+            if not base.is_absolute():
+                base = Path(__file__).resolve().parent.parent / EGIDA_QUARANTINE_DIR
+            self.base_dir = base
 
     def isolate(
         self,
@@ -72,8 +79,8 @@ class Quarantine:
             shutil.copy2(src, dest_file)
             logger.info("Copied to quarantine: %s → %s", src, dest_file)
         except Exception as e:
-            logger.error("Error copying to quarantine %s: %s", src, e)
-            raise
+            logger.warning("Impossibile copiare in quarantena %s: %s — file saltato, continua", src, e)
+            return None
 
         # Generate enriched JSON report
         report = {
