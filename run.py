@@ -311,15 +311,20 @@ def check_status():
     print()
 
 
-def cmd_init():
-    """Guided first-time setup."""
+def cmd_init(path: str | None = None):
+    """Guided first-time setup: init .env templates, register storage, scan files.
+
+    Args:
+        path: Directory da aggiungere come storage e scansionare.
+              Se None, solo setup template .env e logs (nessuna registrazione device).
+    """
     print()
     print("=" * 60)
     print("Chora — Guided Setup")
     print("=" * 60)
     print()
 
-    # 1. Oracle .env
+    # ── 1-4: Setup template .env e logs ─────────────────────────
     oracle_env = _ORACLE_ROOT / ".env"
     oracle_env_example = _ORACLE_ROOT / ".env.example"
     if not oracle_env.exists() and oracle_env_example.exists():
@@ -331,7 +336,6 @@ def cmd_init():
     elif oracle_env.exists():
         print("[OK] oracle-rui/.env already present")
 
-    # 2. Penelope .env
     penelope_env = _PENELOPE_ROOT / ".env"
     penelope_env_example = _PENELOPE_ROOT / ".env.example"
     if not penelope_env.exists() and penelope_env_example.exists():
@@ -341,7 +345,6 @@ def cmd_init():
     elif penelope_env.exists():
         print("[OK] penelope/.env already present")
 
-    # 3. Archimede .env
     archimede_env = _ARCHIMEDE_ROOT / ".env"
     archimede_env_example = _ARCHIMEDE_ROOT / ".env.example"
     if not archimede_env.exists() and archimede_env_example.exists():
@@ -351,83 +354,148 @@ def cmd_init():
     elif archimede_env.exists():
         print("[OK] archimede/.env already present")
 
-    # 4. Logs directory
     (_ROOT / "logs").mkdir(parents=True, exist_ok=True)
     print("[OK] Created logs/ directory")
 
-    # 5. Device auto-registration via marker files
-    #     Ogni PENELOPE_STORAGE_N valorizzato viene scandito:
-    #     - Se non ha marker -> crea device + marker + mount
-    #     - Se ha gia marker -> solo upsert mount (per host corrente, idempotente)
+    # ── Se nessun path fornito: solo setup, interrompi ──────────
+    if not path:
+        print()
+        print("Usage: python run.py --init <PATH>")
+        print()
+        print("  <PATH>  Directory di storage da registrare e scansionare.")
+        print()
+        print("  Esempio:")
+        print("    python run.py --init /Volumes/HDD/Documenti")
+        print()
+        print("  Rilanciare con lo stesso PATH è idempotente:")
+        print("  i file già noti vengono skippati (sha256 match).")
+        print()
+        print("  Per aggiungere un secondo storage:")
+        print("    python run.py --init /Volumes/NAS/Archivio")
+        print()
+        print("=" * 60)
+        return
+
+    # ── 5. Valida path ──────────────────────────────────────────
+    storage_path = Path(path).resolve()
+    if not storage_path.is_dir():
+        print(f"[ERR] Path non è una directory o non esiste: {storage_path}")
+        print()
+        return
+
     print()
+    print(f"  Storage path: {storage_path}")
+    print()
+
+    # ── 6. Persiste path in .env (trova/crea slot) ──────────────
     print('-' * 60)
-    print('Device auto-discovery (storage paths)')
+    print('Storage slot allocation (.env)')
     print('-' * 60)
     print()
 
     try:
-        from penelope.config.settings import STORAGE_PATHS
+        from penelope.discovery import ensure_storage_in_env
+        label_key = ensure_storage_in_env(storage_path)
+        print(f"  [OK]  Path registrato come '{label_key}' in penelope/.env")
+    except (ImportError, FileNotFoundError, ValueError) as e:
+        print(f"  [ERR] {e}")
+        print()
+        return
+
+    # ── 7. Device registration (marker) ──────────────────────────
+    print()
+    print('-' * 60)
+    print('Device registration (marker + mount)')
+    print('-' * 60)
+    print()
+
+    try:
         from penelope.db.mariadb_store import MariaDBStore
         from penelope.discovery import write_device_marker, read_device_marker
-    except ImportError as e:
-        logger.warning('Device auto-discovery non disponibile: %s', e)
-        print('   [SKIP] Penelope modules not importable - skip device registration')
-    else:
+
         db = MariaDBStore()
         hostname = MariaDBStore.current_hostname()
-        registered = 0
-        updated = 0
 
-        for label_key in sorted(STORAGE_PATHS.keys()):
-            raw_path = STORAGE_PATHS[label_key]
-            if not raw_path:
-                continue
+        marker = read_device_marker(storage_path)
 
-            path = Path(raw_path)
-            if not path.is_dir():
-                print(f'   [SKIP] {label_key}: {raw_path} - directory non trovata')
-                continue
-
-            marker = read_device_marker(path)
-
-            if marker is None:
-                # Nuovo device: crea, scrive marker, registra mount
-                try:
-                    with db as store:
-                        device_id = store.ensure_device(
-                            label=label_key,
-                            device_type='local',
-                        )
-                    ok = write_device_marker(path, device_id, label_key)
-                    if not ok:
-                        print(f'   [WARN] {label_key}: marker non scritto (permessi?)')
-                    with db as store:
-                        store.upsert_device_mount(device_id, hostname, str(path))
-                    print(f'   [OK]   {label_key} -> device_id={device_id}, mount={path}')
-                    registered += 1
-                except Exception as e:
-                    print(f'   [ERR]  {label_key}: {e}')
+        if marker is None:
+            # Nuovo device: crea in DB, scrive marker, upsert mount
+            with db as store:
+                device_id = store.ensure_device(
+                    label=label_key,
+                    device_type='local',
+                )
+            ok = write_device_marker(storage_path, device_id, label_key)
+            if not ok:
+                print(f'   [WARN] Marker non scritto (permessi su {storage_path})')
             else:
-                # Device gia noto: aggiorna solo mount per host corrente
-                device_id = marker['device_id']
-                try:
-                    with db as store:
-                        store.upsert_device_mount(device_id, hostname, str(path))
-                    print(f"   [OK]   {label_key} (id={device_id}) - mount aggiornato per host '{hostname}'")
-                    updated += 1
-                except Exception as e:
-                    print(f'   [ERR]  {label_key}: upsert mount fallito: {e}')
-
-        if registered == 0 and updated == 0:
-            print('   Nessuno storage path configurato in .env (PENELOPE_STORAGE_N)')
+                print(f'   [OK]  Marker scritto: {storage_path}/.penelope_device.json')
+            with db as store:
+                store.upsert_device_mount(device_id, hostname, str(storage_path))
+            print(f'   [OK]  Device "{label_key}" (id={device_id}) creato e mount registrato')
+            print(f'         per host "{hostname}" → {storage_path}')
         else:
-            print()
-            print(f'   Device registrati: {registered}   Mount aggiornati: {updated}')
+            # Device già noto: solo upsert mount per host corrente
+            device_id = marker['device_id']
+            with db as store:
+                store.upsert_device_mount(device_id, hostname, str(storage_path))
+            print(f'   [OK]  Device "{label_key}" (id={device_id}) — mount aggiornato')
+            print(f'         per host "{hostname}" → {storage_path}')
 
+    except ImportError as e:
+        print(f'   [SKIP] Device registration non disponibile: {e}')
+        print()
+        print('=' * 60)
+        return
+
+    # ── 8. Scan immediato del path ───────────────────────────────
+    print()
+    print('-' * 60)
+    print('File scan (new/changed files only)')
+    print('-' * 60)
+    print()
+    print(f'  Scanning {storage_path}...')
+    print(f'  (file già noti per sha256 vengono skippati — idempotente)')
+    print()
+
+    scan_ok = 0
+    scan_skipped = 0
+    scan_errors = 0
+
+    try:
+        from penelope.ingestion.scanner import FileScanner
+
+        scanner = FileScanner(device_name=label_key)
+        results = scanner.scan_directory(
+            str(storage_path),
+            project_label=label_key,
+        )
+
+        scan_ok = sum(1 for r in results if r.success)
+        scan_skipped = sum(1 for r in results if r.skipped)
+        scan_errors = sum(1 for r in results if r.error)
+
+        print(f'   [INDEX]  Indicizzati:   {scan_ok}')
+        print(f'   [SKIP]   Saltati:       {scan_skipped}')
+        print(f'   [ERR]    Errori:        {scan_errors}')
+        print(f'   [PROJ]   Progetto:      {label_key}')
+
+    except ImportError as e:
+        print(f'   [SKIP] Scan non disponibile: {e}')
+    except Exception as e:
+        print(f'   [ERR]  {e}')
+
+    # ── Done ─────────────────────────────────────────────────────
     print()
     print('=' * 60)
-    print('Setup complete! Now configure the .env files and then start:')
-    print('  python run.py --all')
+    print('Setup completo!')
+    print()
+    print(f'  Storage:    {storage_path}')
+    print(f'  Device:     {label_key}')
+    print(f'  File scansionati: {scan_ok + scan_skipped} totali ({scan_ok} nuovi)')
+    print()
+    print('  Per avviare Penelope e servire l\'interfaccia:')
+    print('    python run.py --all')
     print()
 
 
@@ -449,13 +517,13 @@ def main():
                         help="Start ALL components")
     parser.add_argument("--status", "--check", action="store_true",
                         help="Check component status (without starting)")
-    parser.add_argument("--init", action="store_true",
-                        help="Guided first-time setup")
+    parser.add_argument("--init", nargs="?", const=None, metavar="PATH",
+                        help="Register a storage path and scan it: python run.py --init /path/to/dir")
     args = parser.parse_args()
 
     # ── Guided setup ─────────────────────────────────────────
-    if args.init:
-        cmd_init()
+    if args.init is not None:
+        cmd_init(args.init)
         return
 
     # ── Diagnostics ───────────────────────────────────────────

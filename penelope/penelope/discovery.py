@@ -174,3 +174,101 @@ def reconcile_devices(db) -> list[dict]:
             continue
 
     return updated
+
+
+# ─── Persistenza storage path in .env ────────────────────────────
+
+
+def ensure_storage_in_env(path: str | Path) -> str:
+    """Persiste un path in un libero slot PENELOPE_STORAGE_N nel .env.
+
+    Cerca il primo slot vuoto (PENELOPE_STORAGE_1..5) e vi scrive il path.
+    Se il path è già presente in uno slot, restituisce la label_key esistente.
+    Se tutti gli slot sono occupati e il path non è già registrato, solleva ValueError.
+
+    Args:
+        path: Path della directory da registrare.
+
+    Returns:
+        La label_key del device (es. 'device_2').
+
+    Raises:
+        ValueError: se tutti gli slot sono occupati e il path è nuovo.
+    """
+    import os as _os
+    from penelope.config import settings as _settings
+
+    target_path = str(Path(path).resolve())
+    env_path = Path(_settings.__file__).resolve().parent.parent.parent / ".env"
+
+    if not env_path.exists():
+        raise FileNotFoundError(f".env non trovato: {env_path}")
+
+    raw = env_path.read_text(encoding="utf-8")
+    lines = raw.splitlines(keepends=True)
+
+    # Mappa slot var -> label_key
+    slot_keys = {f"PENELOPE_STORAGE_{i}": f"device_{i}" for i in range(1, 6)}
+
+    # 1. Verifica se il path è già in uno slot
+    for var, label_key in slot_keys.items():
+        current = _os.environ.get(var, "")
+        if not current:
+            for line in lines:
+                if line.startswith(f"{var}="):
+                    val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if val:
+                        current = val
+                    break
+        if current:
+            try:
+                if Path(current).resolve() == Path(target_path):
+                    logger.debug("Path %s già in slot %s (%s)", target_path, var, label_key)
+                    return label_key
+            except (OSError, PermissionError):
+                if current == target_path:
+                    return label_key
+
+    # 2. Trova primo slot vuoto
+    used = set()
+    for var in slot_keys:
+        val = _os.environ.get(var, "")
+        if val:
+            used.add(var)
+            continue
+        for line in lines:
+            if line.startswith(f"{var}="):
+                v = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if v:
+                    used.add(var)
+                break
+
+    for var, label_key in slot_keys.items():
+        if var not in used:
+            new_line = f"{var}={target_path}\n"
+            new_lines = []
+            written = False
+            for line in lines:
+                if line.startswith(f"{var}="):
+                    new_lines.append(new_line)
+                    written = True
+                else:
+                    new_lines.append(line)
+            if not written:
+                insert_idx = 0
+                for idx, ln in enumerate(new_lines):
+                    if ln.startswith(("PENELOPE_STORAGE_")):
+                        insert_idx = idx + 1
+                new_lines.insert(insert_idx, new_line)
+
+            env_path.write_text("".join(new_lines), encoding="utf-8")
+            _os.environ[var] = target_path  # aggiorna env corrente
+            logger.info("Path %s scritto in slot %s", target_path, var)
+            return label_key
+
+    raise ValueError(
+        f"Tutti gli slot PENELOPE_STORAGE_1..5 sono occupati. "
+        f"Liberane uno o usa un path già registrato.\n"
+        f"Path richiesto: {target_path}\n"
+        f"Slot occupati: {', '.join(sorted(used))}"
+    )
