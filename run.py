@@ -74,7 +74,13 @@ def wait_for_server(url: str, timeout: int = 15, interval: float = 0.5) -> bool:
 
 
 def start_penelope() -> subprocess.Popen | None:
-    """Start Penelope Web API (:5000) as a subprocess."""
+    """Start Penelope Web API (:5000) as a subprocess.
+
+    Prima di avviare il server Flask:
+    1. Esegue device reconciliation (mount automatici via marker files)
+    2. Per ogni device con mount aggiornato, avvia uno scan in background
+       (thread daemon) così il contenuto nuovo entra in coda subito.
+    """
     script = _PENELOPE_ROOT / "web" / "api.py"
     if not script.exists():
         logger.warning("[WARN] Penelope API not found: %s", script)
@@ -82,6 +88,9 @@ def start_penelope() -> subprocess.Popen | None:
 
     log_file = _ROOT / "logs" / "penelope.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # ── Device reconciliation (auto-mount via marker files) ──────
+    _reconcile_and_scan()
 
     logger.info("Starting Penelope on :5000...")
     try:
@@ -99,6 +108,58 @@ def start_penelope() -> subprocess.Popen | None:
     except Exception as e:
         logger.error("[ERR] Error starting Penelope: %s", e)
         return None
+
+
+def _reconcile_and_scan() -> None:
+    """Esegue device reconciliation e avvia scan automatici in background.
+
+    Chiamata da start_penelope() prima di avviare il server Flask.
+    Non blocca l’avvio: eventuali errori sono loggati come warning.
+    """
+    try:
+        from penelope.discovery import reconcile_devices
+        from penelope.db.mariadb_store import MariaDBStore
+        from penelope.ingestion.scanner import FileScanner
+
+        db = MariaDBStore()
+        updated = reconcile_devices(db)
+
+        if not updated:
+            logger.debug("Nessun device aggiornato durante reconciliation")
+            return
+
+        logger.info("Device reconciliation: %d mount aggiornati/creati", len(updated))
+
+        # ── Auto-scan in background per ogni device aggiornato ──
+        import threading
+
+        for entry in updated:
+            label = entry.get("device_label", f"device_{entry['device_id']}")
+            mountpoint = entry.get("mountpoint")
+            if not mountpoint:
+                continue
+
+            def _scan(dev_label: str, mp: str) -> None:
+                try:
+                    logger.info("Auto-scan avviato: %s (%s)", dev_label, mp)
+                    scanner = FileScanner(device_name=dev_label)
+                    scanner.scan_directory(mp, project_label=dev_label)
+                    logger.info("Auto-scan completato: %s", dev_label)
+                except Exception as e:
+                    logger.warning("Auto-scan fallito per %s (%s): %s", dev_label, mp, e)
+
+            t = threading.Thread(
+                target=_scan,
+                args=(label, mountpoint),
+                daemon=True,
+            )
+            t.start()
+            logger.debug("Thread scan avviato per %s", label)
+
+    except ImportError as e:
+        logger.warning("Device reconciliation non disponibile (moduli mancanti): %s", e)
+    except Exception as e:
+        logger.warning("Device reconciliation fallita (non bloccante): %s", e)
 
 
 def start_archimede() -> subprocess.Popen | None:
@@ -294,10 +355,80 @@ def cmd_init():
     (_ROOT / "logs").mkdir(parents=True, exist_ok=True)
     print("[OK] Created logs/ directory")
 
+    # 5. Device auto-registration via marker files
+    #     Ogni PENELOPE_STORAGE_N valorizzato viene scandito:
+    #     - Se non ha marker -> crea device + marker + mount
+    #     - Se ha gia marker -> solo upsert mount (per host corrente, idempotente)
     print()
-    print("Setup complete! Now configure the .env files and then start:")
-    print("  python run.py --all")
+    print('-' * 60)
+    print('Device auto-discovery (storage paths)')
+    print('-' * 60)
     print()
+
+    try:
+        from penelope.config.settings import STORAGE_PATHS
+        from penelope.db.mariadb_store import MariaDBStore
+        from penelope.discovery import write_device_marker, read_device_marker
+    except ImportError as e:
+        logger.warning('Device auto-discovery non disponibile: %s', e)
+        print('   [SKIP] Penelope modules not importable - skip device registration')
+    else:
+        db = MariaDBStore()
+        hostname = MariaDBStore.current_hostname()
+        registered = 0
+        updated = 0
+
+        for label_key in sorted(STORAGE_PATHS.keys()):
+            raw_path = STORAGE_PATHS[label_key]
+            if not raw_path:
+                continue
+
+            path = Path(raw_path)
+            if not path.is_dir():
+                print(f'   [SKIP] {label_key}: {raw_path} - directory non trovata')
+                continue
+
+            marker = read_device_marker(path)
+
+            if marker is None:
+                # Nuovo device: crea, scrive marker, registra mount
+                try:
+                    with db as store:
+                        device_id = store.ensure_device(
+                            label=label_key,
+                            device_type='local',
+                        )
+                    ok = write_device_marker(path, device_id, label_key)
+                    if not ok:
+                        print(f'   [WARN] {label_key}: marker non scritto (permessi?)')
+                    with db as store:
+                        store.upsert_device_mount(device_id, hostname, str(path))
+                    print(f'   [OK]   {label_key} -> device_id={device_id}, mount={path}')
+                    registered += 1
+                except Exception as e:
+                    print(f'   [ERR]  {label_key}: {e}')
+            else:
+                # Device gia noto: aggiorna solo mount per host corrente
+                device_id = marker['device_id']
+                try:
+                    with db as store:
+                        store.upsert_device_mount(device_id, hostname, str(path))
+                    print(f"   [OK]   {label_key} (id={device_id}) - mount aggiornato per host '{hostname}'")
+                    updated += 1
+                except Exception as e:
+                    print(f'   [ERR]  {label_key}: upsert mount fallito: {e}')
+
+        if registered == 0 and updated == 0:
+            print('   Nessuno storage path configurato in .env (PENELOPE_STORAGE_N)')
+        else:
+            print()
+            print(f'   Device registrati: {registered}   Mount aggiornati: {updated}')
+
+    print()
+    print('=' * 60)
+    print('Setup complete! Now configure the .env files and then start:')
+    print('  python run.py --all')
+    print()"}]
 
 
 def main():

@@ -16,6 +16,7 @@ spacy>=3.7.0
 
 # Utility
 python-magic>=0.4.27
+psutil>=5.9.0
 python-dotenv>=1.0.0
 keyring>=24.0.0
 keyrings.alt>=5.0.0  # fallback per Linux senza secret service
