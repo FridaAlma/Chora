@@ -428,7 +428,7 @@ def cmd_init():
     print('=' * 60)
     print('Setup complete! Now configure the .env files and then start:')
     print('  python run.py --all')
-    print()"}]
+    print()
 
 
 def main():
