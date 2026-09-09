@@ -292,18 +292,25 @@ class PenelopeBridge:
         try:
             nodes = reader._query(
                 """SELECT n.id as node_id, n.label, n.type, n.metadata,
-                          f.path, f.mime_type
+                          f.path, f.mime_type, d.mount_root
                    FROM nodes n
                    LEFT JOIN file_registry f ON f.node_id = n.id
+                   LEFT JOIN devices d ON d.id = f.device_id
                    WHERE n.label LIKE %s
                       OR (f.path LIKE %s)
                    LIMIT %s""",
                 (f"%{query}%", f"%{query}%", top_k),
             )
+
+            def _resolve(n_path, mount_root):
+                if mount_root and n_path and not (n_path.startswith("/") or n_path.startswith("\\") or (len(n_path) > 1 and n_path[1] == ":")):
+                    return str(Path(mount_root) / n_path)
+                return n_path
+
             return [
                 {
                     "node_id": n.get("node_id", ""),
-                    "file_name": Path(n.get("path", "")).name if n.get("path") else n.get("label", ""),
+                    "file_name": Path(_resolve(n.get("path", ""), n.get("mount_root"))).name if n.get("path") else n.get("label", ""),
                     "mime_type": n.get("mime_type", ""),
                     "distance": 0,
                     "snippet": n.get("label", ""),
@@ -683,11 +690,21 @@ def main():
             result = bridge.get_person_photos(args.person, args.limit)
         else:
             result = bridge.execute_query(
-                "SELECT n.id, n.label, f.path FROM nodes n JOIN file_registry f ON f.node_id = n.id "
+                "SELECT n.id, n.label, f.path, d.mount_root FROM nodes n "
+                "JOIN file_registry f ON f.node_id = n.id "
+                "LEFT JOIN devices d ON d.id = f.device_id "
                 "WHERE n.type = 'File' AND (f.path LIKE '%.jpg' OR f.path LIKE '%.jpeg' OR f.path LIKE '%.png') "
                 "LIMIT %s",
                 (args.limit,),
             )
+        # Risolve path relativi (mount_root + path) per risultati
+        if result and isinstance(result, list):
+            from pathlib import Path as _Path
+            for r in result:
+                p = r.get("path", "")
+                mr = r.get("mount_root")
+                if mr and p and not (p.startswith("/") or p.startswith("\\") or (len(p) > 1 and p[1] == ":")):
+                    r["path"] = str(_Path(mr) / p)
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
     elif args.command == "events":

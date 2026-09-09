@@ -59,6 +59,7 @@ def _load_person_embeddings(db) -> tuple[list[dict], np.ndarray, list[str]]:
         """SELECT DISTINCT n.id, n.label, n.metadata,
                (SELECT f.path FROM edges e
                 JOIN file_registry f ON f.node_id = e.source_id
+                LEFT JOIN devices d ON d.id = f.device_id
                 WHERE e.target_id = n.id AND e.relation = 'CONTAINS'
                 LIMIT 1) as file_path
            FROM nodes n
@@ -379,10 +380,12 @@ def get_photos_by_person_name(db, name_tag: str, reader=None) -> list[dict]:
 
     placeholders = ",".join(["%s"] * len(person_ids))
     rows = db._query(
-        f"""SELECT f.path, f.device, f.mime_type, n.id as file_node_id,
+        f"""SELECT f.path, f.device, f.mime_type, d.mount_root,
+                   n.id as file_node_id,
                    p.id as person_id, p.label as person_label
             FROM edges e
             JOIN file_registry f ON f.node_id = e.source_id
+            LEFT JOIN devices d ON d.id = f.device_id
             JOIN nodes n ON n.id = e.source_id
             JOIN nodes p ON p.id = e.target_id
             WHERE e.relation = 'CONTAINS'

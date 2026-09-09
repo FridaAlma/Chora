@@ -20,11 +20,25 @@ class PenelopeGraphReader:
 
     Garantisce che vengano eseguite solo query SELECT.
     Ottiene le credenziali attraverso il keyring di sistema (come fa Penelope).
+    Tutte le path vengono risolte tramite mount_root del device.
     """
 
     def __init__(self) -> None:
         self._store: Any = None
         self._init_store()
+
+    @staticmethod
+    def _resolve_file_path(path: str, mount_root: Optional[str]) -> str:
+        """Risolve path assoluto del file.
+
+        Se mount_root noto e path non assoluto, combina mount_root + path.
+        Altrimenti restituisce path inalterato (backward compat).
+        """
+        if not mount_root:
+            return path
+        if path.startswith("/") or path.startswith("\\") or (len(path) > 1 and path[1] == ":"):
+            return path  # gia\' assoluto
+        return str(Path(mount_root) / path)
 
     def _init_store(self) -> None:
         """Inizializza il MariaDBStore di Penelope."""
@@ -130,13 +144,18 @@ class PenelopeGraphReader:
         limit: int = 0,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """Restituisce tutte le foto indicizzate con metadati."""
+        """Restituisce tutte le foto indicizzate con metadati.
+
+        Il path e' risolto tramite mount_root del device (se disponibile).
+        """
         like_clauses = " OR f.path LIKE ".join(["%s"] * len(extensions))
         sql = f"""
             SELECT n.id as node_id, n.label, n.metadata as node_metadata,
-                   f.path, f.device, f.size_bytes, f.sha256, f.mime_type
+                   f.path, f.device, f.size_bytes, f.sha256, f.mime_type,
+                   d.mount_root, d.label AS device_label
             FROM nodes n
             JOIN file_registry f ON f.node_id = n.id
+            LEFT JOIN devices d ON d.id = f.device_id
             WHERE n.type = 'File'
               AND (f.path LIKE {like_clauses})
             ORDER BY f.path
@@ -148,36 +167,56 @@ class PenelopeGraphReader:
             if offset:
                 sql += " OFFSET %s"
                 params.append(offset)
-        return self._query(sql, tuple(params))
+        rows = self._query(sql, tuple(params))
+        # Risolve path assoluti
+        for row in rows:
+            row["path"] = self._resolve_file_path(row.get("path", ""), row.get("mount_root"))
+        return rows
 
     def get_photos_in_directory(self, directory: str) -> list[dict[str, Any]]:
-        """Foto in una directory specifica."""
+        """Foto in una directory specifica.
+
+        Il path e' risolto tramite mount_root del device (se disponibile).
+        """
         pattern = f"%{directory}%"
-        return self._query(
+        rows = self._query(
             """SELECT n.id as node_id, n.label, n.metadata as node_metadata,
-                      f.path, f.device, f.size_bytes, f.sha256, f.mime_type
+                      f.path, f.device, f.size_bytes, f.sha256, f.mime_type,
+                      d.mount_root, d.label AS device_label
                FROM nodes n
                JOIN file_registry f ON f.node_id = n.id
+               LEFT JOIN devices d ON d.id = f.device_id
                WHERE n.type = 'File'
                  AND f.path LIKE %s
                  AND (f.path LIKE %s OR f.path LIKE %s OR f.path LIKE %s)
                ORDER BY f.path""",
             (pattern, "%.jpg", "%.jpeg", "%.png"),
         )
+        for row in rows:
+            row["path"] = self._resolve_file_path(row.get("path", ""), row.get("mount_root"))
+        return rows
 
     def get_photos_with_face_count(self) -> list[dict[str, Any]]:
-        """Foto che hanno metadati face_count."""
-        return self._query(
+        """Foto che hanno metadati face_count.
+
+        Il path e' risolto tramite mount_root del device (se disponibile).
+        """
+        rows = self._query(
             """SELECT n.id as node_id, n.label, n.metadata as node_metadata,
-                      f.path, f.device, f.size_bytes, f.sha256, f.mime_type
+                      f.path, f.device, f.size_bytes, f.sha256, f.mime_type,
+                      d.mount_root, d.label AS device_label
                FROM nodes n
                JOIN file_registry f ON f.node_id = n.id
+               LEFT JOIN devices d ON d.id = f.device_id
                WHERE n.type = 'File'
                  AND n.metadata LIKE %s
                  AND (f.path LIKE %s OR f.path LIKE %s OR f.path LIKE %s)
                ORDER BY f.path""",
             ("%face_count%", "%.jpg", "%.jpeg", "%.png"),
         )
+        for row in rows:
+            row["path"] = self._resolve_file_path(row.get("path", ""), row.get("mount_root"))
+        return rows
 
     def get_person_nodes(self, source: str = "") -> list[dict[str, Any]]:
         """Nodi Person, opzionalmente filtrati per source."""

@@ -639,9 +639,11 @@ async def get_photo_detail(node_id: str):
     try:
         photos = reader._query(
             """SELECT n.id as node_id, n.label, n.metadata as node_metadata,
-                      f.path, f.device, f.size_bytes, f.sha256, f.mime_type
+                      f.path, f.device, f.size_bytes, f.sha256, f.mime_type,
+                      d.mount_root
                FROM nodes n
                JOIN file_registry f ON f.node_id = n.id
+               LEFT JOIN devices d ON d.id = f.device_id
                WHERE n.id = %s""",
             (node_id,),
         )
@@ -649,6 +651,12 @@ async def get_photo_detail(node_id: str):
             raise HTTPException(status_code=404, detail="Foto non trovata")
 
         photo = photos[0]
+        # Risolve path assoluto
+        from pathlib import Path as _Path
+        raw_path = photo.get("path", "")
+        mount_root = photo.get("mount_root")
+        if mount_root and not (raw_path.startswith("/") or raw_path.startswith("\\") or (len(raw_path) > 1 and raw_path[1] == ":")):
+            photo["path"] = str(_Path(mount_root) / raw_path)
         edges = reader.get_edges_for_photo(node_id)
         persons = reader.get_persons_in_photo(node_id)
 
