@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Evita che SentenceTransformer/Transformers contattino HuggingFace Hub (offline)
 os.environ["HF_HUB_OFFLINE"] = "1"
