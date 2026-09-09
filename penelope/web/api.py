@@ -31,6 +31,21 @@ from penelope.db.chroma_store import ChromaStore
 from penelope.config import settings
 
 
+# ─── Helper: risolve path assoluto (mount_root + path relativo) ───
+
+def _resolve_path(raw_path: str, mount_root: Optional[str] = None) -> str:
+    """Ricostruisce path assoluto.
+
+    Se mount_root noto e path non assoluto, combina mount_root + path.
+    Altrimenti restituisce path inalterato (backward compat).
+    """
+    if not mount_root:
+        return raw_path
+    if raw_path.startswith("/") or raw_path.startswith("\\") or (len(raw_path) > 1 and raw_path[1] == ":"):
+        return raw_path  # gia\' assoluto
+    return str(Path(mount_root) / raw_path)
+
+
 # Thread-local storage per connessioni MySQL (evita race condition su Flask multi-thread)
 _tls = threading.local()
 
@@ -164,11 +179,13 @@ def api_nodes():
         cur.execute(f"SELECT COUNT(*) AS cnt FROM nodes n {where_clause}", tuple(params))
         total = cur.fetchone()["cnt"]
 
-        # Query con file_registry opzionale
+        # Query con file_registry opzionale + mount_root
         sql = f"""SELECT n.id, n.type, n.label, n.metadata, n.created_at,
-                         f.path, f.mime_type, f.device, f.size_bytes, f.sha256
+                         f.path, f.mime_type, f.device, f.size_bytes, f.sha256,
+                         d.mount_root
                   FROM nodes n
                   LEFT JOIN file_registry f ON f.node_id = n.id
+                  LEFT JOIN devices d ON d.id = f.device_id
                   {where_clause}
                   ORDER BY n.created_at DESC
                   LIMIT %s OFFSET %s"""
@@ -189,7 +206,7 @@ def api_nodes():
                 "type": r["type"],
                 "label": r["label"],
                 "created_at": str(r["created_at"]) if r.get("created_at") else None,
-                "path": r.get("path") or "",
+                "path": _resolve_path(r.get("path", ""), r.get("mount_root")),
                 "mime_type": r.get("mime_type") or "",
                 "device": r.get("device") or "",
                 "size_bytes": r.get("size_bytes"),
@@ -234,12 +251,24 @@ def api_node_detail(node_id):
             "metadata": meta,
         }
 
-        # File registry (se presente)
-        cur.execute("SELECT * FROM file_registry WHERE node_id = %s", (node_id,))
+        # File registry (se presente) — con mount_root per path relativi
+        cur.execute("""
+            SELECT f.*, d.mount_root
+            FROM file_registry f
+            LEFT JOIN devices d ON d.id = f.device_id
+            WHERE f.node_id = %s
+        """, (node_id,))
         fr = cur.fetchone()
         if fr:
+            # Risolve path assoluto
+            raw_path = fr.get("path", "")
+            mount_root = fr.get("mount_root")
+            if mount_root and not (raw_path.startswith("/") or raw_path.startswith("\\") or (len(raw_path) > 1 and raw_path[1] == ":")):
+                resolved_path = str(Path(mount_root) / raw_path)
+            else:
+                resolved_path = raw_path
             node["file"] = {
-                "path": fr.get("path", ""),
+                "path": resolved_path,
                 "device": fr.get("device", ""),
                 "size_bytes": fr.get("size_bytes"),
                 "sha256": fr.get("sha256", ""),
@@ -299,10 +328,20 @@ def api_node_detail(node_id):
                 if edge["relation"] == "CONTAINS":
                     file_id = edge.get("target_id") or edge.get("source_id")
                     if file_id:
-                        cur.execute("SELECT path FROM file_registry WHERE node_id = %s", (file_id,))
+                        cur.execute("""
+                            SELECT f.path, d.mount_root
+                            FROM file_registry f
+                            LEFT JOIN devices d ON d.id = f.device_id
+                            WHERE f.node_id = %s
+                        """, (file_id,))
                         file_row = cur.fetchone()
                         if file_row:
-                            node["photo_path"] = file_row["path"]
+                            raw_path = file_row["path"]
+                            mount_root = file_row.get("mount_root")
+                            if mount_root and not (raw_path.startswith("/") or raw_path.startswith("\\") or (len(raw_path) > 1 and raw_path[1] == ":")):
+                                node["photo_path"] = str(Path(mount_root) / raw_path)
+                            else:
+                                node["photo_path"] = raw_path
                             break
 
         return jsonify({"node": node, "incoming": incoming, "outgoing": outgoing})
@@ -420,13 +459,16 @@ def api_search():
                 try:
                     cur = _get_cursor()
                     cur.execute(
-                        "SELECT f.path FROM file_registry f WHERE f.node_id = %s",
+                        """SELECT f.path, d.mount_root
+                           FROM file_registry f
+                           LEFT JOIN devices d ON d.id = f.device_id
+                           WHERE f.node_id = %s""",
                         (node_id,),
                     )
                     row = cur.fetchone()
                     if row:
-                        r["file_path"] = row["path"]
-                        r["extension"] = Path(row["path"]).suffix.lower()
+                        r["file_path"] = _resolve_path(row["path"], row.get("mount_root"))
+                        r["extension"] = Path(r["file_path"]).suffix.lower()
                     else:
                         r["file_path"] = ""
                         r["extension"] = ""
@@ -451,11 +493,13 @@ def api_faces():
         offset = int(request.args.get("offset", 0))
         cur.execute("""
             SELECT n.id, n.label, n.metadata,
+                   d.mount_root,
                    f.path as file_path,
                    e.source_id as file_node_id
             FROM nodes n
             JOIN edges e ON e.target_id = n.id AND e.relation = 'CONTAINS'
             LEFT JOIN file_registry f ON f.node_id = e.source_id
+            LEFT JOIN devices d ON d.id = f.device_id
             WHERE n.type = 'Person'
             ORDER BY n.created_at DESC
             LIMIT %s OFFSET %s
@@ -673,15 +717,16 @@ def api_events():
             # Prendi una miniatura dal primo file collegato
             if r["file_count"] > 0:
                 cur.execute("""
-                    SELECT e.source_id as file_id, f.path
+                    SELECT e.source_id as file_id, f.path, d.mount_root
                     FROM edges e
                     LEFT JOIN file_registry f ON f.node_id = e.source_id
+                    LEFT JOIN devices d ON d.id = f.device_id
                     WHERE e.target_id = %s AND e.relation = 'CREATED_AT'
                     LIMIT 1
                 """, (r["id"],))
                 thumb = cur.fetchone()
                 if thumb and thumb.get("path"):
-                    path = thumb["path"]
+                    path = _resolve_path(thumb["path"], thumb.get("mount_root"))
                     ext = Path(path).suffix.lower()
                     if ext in ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'):
                         ev["thumbnail_id"] = thumb["file_id"]
@@ -742,10 +787,12 @@ def api_event_detail(event_id):
         cur.execute("""
             SELECT e.source_id as file_id, e.metadata as edge_meta,
                    n.label as file_label, n.type as file_type, n.metadata as file_meta,
-                   f.path, f.mime_type, f.size_bytes, f.device
+                   f.path, f.mime_type, f.size_bytes, f.device,
+                   d.mount_root
             FROM edges e
             JOIN nodes n ON n.id = e.source_id
             LEFT JOIN file_registry f ON f.node_id = e.source_id
+            LEFT JOIN devices d ON d.id = f.device_id
             WHERE e.target_id = %s AND e.relation = 'CREATED_AT'
             ORDER BY n.label
         """, (event_id,))
@@ -761,7 +808,7 @@ def api_event_detail(event_id):
                 "id": r["file_id"],
                 "label": r["file_label"],
                 "type": r["file_type"],
-                "path": r.get("path", ""),
+                "path": _resolve_path(r.get("path", ""), r.get("mount_root")),
                 "mime_type": r.get("mime_type", ""),
                 "size_bytes": r.get("size_bytes"),
                 "device": r.get("device", ""),
@@ -887,14 +934,29 @@ def api_image(node_id):
     """Serve un'immagine dal file_registry dato il node_id."""
     cur = _get_cursor()
     try:
-        cur.execute("SELECT f.path FROM file_registry f WHERE f.node_id = %s", (node_id,))
+        cur.execute("""
+            SELECT f.path, d.mount_root
+            FROM file_registry f
+            LEFT JOIN devices d ON d.id = f.device_id
+            WHERE f.node_id = %s
+        """, (node_id,))
         row = cur.fetchone()
         if not row:
             return jsonify({"error": "Immagine non trovata"}), 404
 
-        path = Path(row["path"])
+        # Risolve path assoluto (mount_root + path relativo, o path inalterato se già assoluto)
+        raw_path = row["path"]
+        mount_root = row.get("mount_root")
+        if mount_root and not (raw_path.startswith("/") or raw_path.startswith("\\") or (len(raw_path) > 1 and raw_path[1] == ":")):
+            path = Path(mount_root) / raw_path
+        else:
+            path = Path(raw_path)
+
         if not path.exists():
-            return jsonify({"error": "File immagine non trovato su disco"}), 404
+            # Prova con path inalterato (fallback per backward compat)
+            path = Path(raw_path)
+            if not path.exists():
+                return jsonify({"error": "File immagine non trovato su disco"}), 404
 
         from flask import send_file
         return send_file(str(path))

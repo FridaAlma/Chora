@@ -372,6 +372,122 @@ def cmd_db(args):
                 print(f"   {r['relation']}: {r['cnt']}")
         db.close()
 
+    elif args.action == "verify":
+        """Verifica raggiungibilità fisica di ogni riga in file_registry.
+
+        Per ogni riga:
+        1. Risolve path assoluto (mount_root + path relativo o path inalterato)
+        2. Controlla se il file esiste su disco (os.path.exists)
+        3. Aggiorna status (online/offline) e last_verified_at
+
+        Non cancella MAI righe offline. Stampa un riepilogo per device.
+        """
+        import os as _os
+        import time as _time
+
+        db = MariaDBStore()
+        with db as store:
+            # Query: file_registry + mount_root dal device (LEFT JOIN per backward compat)
+            sql = """
+                SELECT f.id, f.node_id, f.device, f.path, f.status,
+                       d.mount_root, d.label AS device_label
+                FROM file_registry f
+                LEFT JOIN devices d ON d.id = f.device_id
+            """
+            params: tuple = ()
+            if args.device:
+                # Filtra per device label (stringa libera o device_id)
+                if args.device.isdigit():
+                    sql += " WHERE f.device_id = %s"
+                else:
+                    sql += " WHERE f.device = %s"
+                params = (args.device,)
+            sql += " ORDER BY f.device, f.path"
+            if args.limit:
+                sql += " LIMIT %s"
+                params = params + (args.limit,)
+
+            rows = store._query(sql, params)
+
+        if not rows:
+            print("[DB] file_registry vuoto. Nessuna verifica da fare.")
+            return
+
+        total = len(rows)
+        online = 0
+        offline = 0
+        skipped = 0  # path vuoti
+        device_stats: dict[str, dict] = {}
+
+        print(f"\n[DB] Verifica raggiungibilità: {total} righe da controllare...\n")
+
+        t_start = _time.time()
+        for i, row in enumerate(rows, 1):
+            rid = row["id"]
+            device_label = row.get("device_label") or row["device"]
+            path_raw = row["path"]
+            mount_root = row.get("mount_root")
+
+            # Inizializza statistiche per device
+            if device_label not in device_stats:
+                device_stats[device_label] = {"total": 0, "online": 0, "offline": 0, "mount_root": mount_root}
+            device_stats[device_label]["total"] += 1
+
+            # Risolve path assoluto
+            if mount_root and not (path_raw.startswith("/") or path_raw.startswith("\\") or (len(path_raw) > 1 and path_raw[1] == ":")):
+                abs_path = str(Path(mount_root) / path_raw)
+            else:
+                abs_path = path_raw  # già assoluto (old data) o mount_root sconosciuto
+
+            if not abs_path.strip():
+                device_stats[device_label]["offline"] += 1
+                skipped += 1
+                with db as store:
+                    store.verify_file_location(rid, is_online=False)
+                continue
+
+            # Verifica esistenza file
+            file_exists = _os.path.exists(abs_path)
+
+            with db as store:
+                store.verify_file_location(rid, is_online=file_exists)
+
+            if file_exists:
+                online += 1
+                device_stats[device_label]["online"] += 1
+            else:
+                offline += 1
+                device_stats[device_label]["offline"] += 1
+
+            # Progress ogni 100 righe
+            if i % 100 == 0:
+                print(f"   Progresso: {i}/{total} (online={online}, offline={offline})")
+
+        duration = _time.time() - t_start
+
+        # ─── Report finale ──────────────────────────────────────
+        print(f"\n{'='*60}")
+        print(f"  VERIFICA COMPLETATA ({duration:.1f}s)")
+        print(f"{'='*60}")
+        print(f"  Totale righe:           {total}")
+        print(f"  Online (file trovato):  {online}")
+        print(f"  Offline (file assente): {offline}")
+        if skipped:
+            print(f"  Saltati (path vuoto):   {skipped}")
+        print()
+
+        for dev_label, stats in sorted(device_stats.items()):
+            mr = stats["mount_root"] or "(path assoluto)"
+            print(f"  [{dev_label}]")
+            print(f"      mount_root: {mr}")
+            print(f"      totale:     {stats['total']}")
+            print(f"      online:     {stats['online']}")
+            print(f"      offline:    {stats['offline']}")
+            if stats['total'] > 0:
+                pct = stats['online'] / stats['total'] * 100
+                print(f"      copertura:  {pct:.1f}%")
+            print()
+
 
 def cmd_geo(args):
     """Geocoding GPS: coordinate EXIF → Location nodes."""
@@ -1010,7 +1126,9 @@ def main():
 
     # db
     p_db = sub.add_parser("db", help="Operazioni sul database")
-    p_db.add_argument("action", choices=["dedup", "stats"], help="Azione")
+    p_db.add_argument("action", choices=["dedup", "stats", "verify"], help="Azione")
+    p_db.add_argument("--device", default=None, help="Filtra verifica per device label")
+    p_db.add_argument("--limit", type=int, default=0, help="Limite righe da verificare")
     p_db.set_defaults(func=cmd_db)
 
     # geo

@@ -5,6 +5,7 @@ CRUD base per nodi, archi, file_registry e coda di ingestion.
 
 import json
 import logging
+from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -129,7 +130,110 @@ class MariaDBStore:
         sql = "DELETE FROM edges WHERE id = %s"
         return self._execute(sql, (edge_id,)) > 0
 
-    # ─── FILE REGISTRY ──────────────────────────────────────────
+    # ─── DEVICES ────────────────────────────────────────────────
+
+    def create_device(
+        self,
+        label: str,
+        device_type: str = "local",
+        mount_root: Optional[str] = None,
+        volume_uuid: Optional[str] = None,
+    ) -> int:
+        """Crea un device e restituisce il suo ID.
+
+        Args:
+            label: Nome del device (unique).
+            device_type: 'local', 'external', 'network', 'server'.
+            mount_root: Punto di mount corrente (può cambiare).
+            volume_uuid: UUID del volume (per mount resilient).
+
+        Returns:
+            ID del device (int).
+        """
+        sql = """INSERT INTO devices (label, type, mount_root, volume_uuid, last_seen_at)
+                 VALUES (%s, %s, %s, %s, NOW())
+                 ON DUPLICATE KEY UPDATE last_seen_at = NOW(), mount_root = COALESCE(%s, mount_root)"""
+        self._execute(sql, (label, device_type, mount_root, volume_uuid, mount_root))
+        # Recupera ID (potrebbe essere un update, non insert)
+        rows = self._query("SELECT id FROM devices WHERE label = %s LIMIT 1", (label,))
+        return rows[0]["id"] if rows else 0
+
+    def get_device(self, device_id: int) -> Optional[dict]:
+        """Restituisce un device per ID."""
+        sql = "SELECT * FROM devices WHERE id = %s"
+        rows = self._query(sql, (device_id,))
+        return rows[0] if rows else None
+
+    def get_device_by_label(self, label: str) -> Optional[dict]:
+        """Restituisce un device per label."""
+        sql = "SELECT * FROM devices WHERE label = %s LIMIT 1"
+        rows = self._query(sql, (label,))
+        return rows[0] if rows else None
+
+    def ensure_device(
+        self,
+        label: str,
+        device_type: str = "local",
+        mount_root: Optional[str] = None,
+    ) -> int:
+        """Trova o crea un device, restituisce ID."""
+        existing = self.get_device_by_label(label)
+        if existing:
+            if mount_root and existing.get("mount_root") != mount_root:
+                self._execute(
+                    "UPDATE devices SET mount_root = %s, last_seen_at = NOW() WHERE id = %s",
+                    (mount_root, existing["id"]),
+                )
+            else:
+                self._execute(
+                    "UPDATE devices SET last_seen_at = NOW() WHERE id = %s",
+                    (existing["id"],),
+                )
+            return existing["id"]
+        return self.create_device(label=label, device_type=device_type, mount_root=mount_root)
+
+    def update_device_mount_root(self, device_id: int, mount_root: str) -> bool:
+        """Aggiorna mount_root di un device."""
+        return self._execute(
+            "UPDATE devices SET mount_root = %s, last_seen_at = NOW() WHERE id = %s",
+            (mount_root, device_id),
+        ) > 0
+
+    def list_devices(self) -> list[dict]:
+        """Lista di tutti i device."""
+        return self._query("SELECT * FROM devices ORDER BY label")
+
+    def get_device_stats(self) -> list[dict]:
+        """Statistiche per device: label, online, offline, totale righe."""
+        return self._query(
+            """SELECT d.id, d.label, d.mount_root, d.type, d.last_seen_at,
+                      COUNT(f.id) AS total_rows,
+                      SUM(f.status = 'online') AS online_count,
+                      SUM(f.status = 'offline') AS offline_count
+               FROM devices d
+               LEFT JOIN file_registry f ON f.device_id = d.id
+               GROUP BY d.id, d.label, d.mount_root, d.type, d.last_seen_at
+               ORDER BY d.label"""
+        )
+
+    # ─── FILE REGISTRY (multi-location) ─────────────────────────-
+
+    @staticmethod
+    def _compute_rel_path(abs_path: str, mount_root: Optional[str]) -> str:
+        """Converte path assoluto in relativo rispetto a mount_root.
+
+        Se mount_root è None, restituisce il path assoluto inalterato
+        (backward compatibilità).
+        """
+        if not mount_root:
+            return abs_path
+        # Assicura che mount_root finisca con /
+        root = mount_root.rstrip("/") + "/"
+        if abs_path.startswith(root):
+            return abs_path[len(root):]
+        # Se il path non inizia con mount_root, restituiscilo inalterato
+        # (potrebbe essere su mount diverso o già relativo)
+        return abs_path
 
     def register_file(
         self,
@@ -139,20 +243,165 @@ class MariaDBStore:
         size_bytes: Optional[int] = None,
         sha256: Optional[str] = None,
         mime_type: Optional[str] = None,
+        device_id: Optional[int] = None,
     ) -> int:
-        sql = """INSERT INTO file_registry (node_id, device, path, size_bytes, sha256, mime_type)
-                 VALUES (%s, %s, %s, %s, %s, %s)"""
-        self._execute(sql, (node_id, device, path, size_bytes, sha256, mime_type))
+        """Registra una posizione fisica per un nodo File.
+
+        Se device_id non fornito, lo risolve dal label device.
+        Se il device ha mount_root, il path viene convertito in
+        path relativo prima dello storage.
+
+        Args:
+            node_id: UUID del nodo File.
+            device: Label del device (es. 'laptop-main', 'hdd-ext').
+            path: Path assoluto o relativo (convertito se mount_root noto).
+            size_bytes: Dimensione file.
+            sha256: Hash SHA-256.
+            mime_type: MIME type.
+            device_id: ID del device (opzionale, risolto da label se omesso).
+
+        Returns:
+            ID della riga file_registry creata.
+        """
+        # Risolve device_id se non fornito
+        if device_id is None:
+            dev = self.get_device_by_label(device)
+            if dev:
+                device_id = dev["id"]
+            else:
+                # Crea device con mount_root sconosciuto (sarà configurato dopo)
+                device_id = self.ensure_device(label=device)
+
+        # Recupera mount_root per il device
+        mount_root = None
+        dev_info = self.get_device(device_id)
+        if dev_info:
+            mount_root = dev_info.get("mount_root")
+
+        # Converte path in relativo se mount_root noto
+        stored_path = self._compute_rel_path(path, mount_root)
+
+        sql = """INSERT INTO file_registry (node_id, device, device_id, path, size_bytes, sha256, mime_type)
+                 VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+        self._execute(sql, (node_id, device, device_id, stored_path, size_bytes, sha256, mime_type))
         return int(self._conn.insert_id())
+
+    def register_file_location(
+        self,
+        node_id: str,
+        device: str,
+        path: str,
+        size_bytes: Optional[int] = None,
+        sha256: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> int:
+        """Aggiunge UNA NUOVA posizione fisica per un nodo già esistente.
+
+        Se (device, path relativo) è già registrato per questo node_id,
+        non fa nulla (idempotente). Altrimenti inserisce una nuova riga.
+
+        Returns:
+            ID della riga (esistente o nuova).
+        """
+        dev = self.get_device_by_label(device)
+        device_id = dev["id"] if dev else self.ensure_device(label=device)
+        mount_root = dev["mount_root"] if dev else None
+        stored_path = self._compute_rel_path(path, mount_root)
+
+        # Verifica se già esiste (device + path + node_id)
+        existing = self._query(
+            "SELECT id FROM file_registry "
+            "WHERE node_id = %s AND device = %s AND path = %s LIMIT 1",
+            (node_id, device, stored_path),
+        )
+        if existing:
+            # Aggiorna last_seen
+            self._execute(
+                "UPDATE file_registry SET status = 'online', last_seen = NOW() WHERE id = %s",
+                (existing[0]["id"],),
+            )
+            return existing[0]["id"]
+
+        # Inserisce nuova riga
+        sql = """INSERT INTO file_registry (node_id, device, device_id, path, size_bytes, sha256, mime_type, status)
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, 'online')"""
+        self._execute(sql, (node_id, device, device_id, stored_path, size_bytes, sha256, mime_type))
+        return int(self._conn.insert_id())
+
+    def get_file_registry_for_node(self, node_id: str) -> list[dict]:
+        """Restituisce TUTTE le posizioni fisiche registrate per un nodo.
+
+        Arricchisce ogni riga con mount_root del device per ricostruire
+        il path assoluto.
+        """
+        return self._query(
+            """SELECT f.*, d.mount_root, d.type AS device_type
+               FROM file_registry f
+               LEFT JOIN devices d ON d.id = f.device_id
+               WHERE f.node_id = %s
+               ORDER BY f.last_seen DESC""",
+            (node_id,),
+        )
+
+    def resolve_file_path(self, registry_row: dict) -> str:
+        """Ricostruisce il path assoluto del file da una riga file_registry.
+
+        Se il device ha mount_root, fa mount_root + path (relativo).
+        Altrimenti restituisce path inalterato (backward compat: path assoluto).
+
+        Args:
+            registry_row: dict con chiavi 'path' e opzionalmente 'mount_root'.
+
+        Returns:
+            Path assoluto del file.
+        """
+        path = registry_row.get("path", "")
+        mount_root = registry_row.get("mount_root") or registry_row.get("device_mount_root")
+        if mount_root:
+            # Se path è già assoluto (vecchi dati), restituiscilo inalterato
+            if path.startswith("/") or path.startswith("\\") or (len(path) > 1 and path[1] == ":"):
+                return path
+            # Altrimenti combina mount_root + path relativo
+            return str(Path(mount_root) / path)
+        return path
 
     def get_files_by_device(self, device: str) -> list[dict]:
         sql = """SELECT * FROM file_registry WHERE device = %s ORDER BY path"""
         return self._query(sql, (device,))
 
+    def get_files_by_device_id(self, device_id: int) -> list[dict]:
+        sql = """SELECT f.*, d.mount_root FROM file_registry f
+                 LEFT JOIN devices d ON d.id = f.device_id
+                 WHERE f.device_id = %s ORDER BY f.path"""
+        return self._query(sql, (device_id,))
+
     def get_file_by_sha256(self, sha256: str) -> Optional[dict]:
         sql = "SELECT * FROM file_registry WHERE sha256 = %s LIMIT 1"
         rows = self._query(sql, (sha256,))
         return rows[0] if rows else None
+
+    def get_file_registry_locations_by_sha256(self, sha256: str) -> list[dict]:
+        """Restituisce TUTTE le posizioni per un certo sha256.
+
+        Utile per dedup: invece di prendere solo la prima riga,
+        si possono vedere tutte le copie (stesso contenuto, device diversi).
+        """
+        return self._query(
+            """SELECT f.*, d.mount_root, d.label AS device_label
+               FROM file_registry f
+               LEFT JOIN devices d ON d.id = f.device_id
+               WHERE f.sha256 = %s
+               ORDER BY f.last_seen DESC""",
+            (sha256,),
+        )
+
+    def verify_file_location(self, registry_id: int, is_online: bool) -> bool:
+        """Aggiorna status e last_verified_at per una riga file_registry."""
+        status = "online" if is_online else "offline"
+        return self._execute(
+            "UPDATE file_registry SET status = %s, last_verified_at = NOW(), last_seen = NOW() WHERE id = %s",
+            (status, registry_id),
+        ) > 0
 
     # ─── CODA DI INGESTIONE ─────────────────────────────────────
 

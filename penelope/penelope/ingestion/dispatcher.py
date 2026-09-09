@@ -79,9 +79,12 @@ class Dispatcher:
                 self.db.mark_done(queue_id, error="node_not_found")
                 return False
 
-            # Trova il path dal file_registry
+            # Trova il path dal file_registry (con mount_root per path relativi)
             file_info = self.db._query(
-                "SELECT * FROM file_registry WHERE node_id = %s LIMIT 1",
+                """SELECT f.*, d.mount_root
+                   FROM file_registry f
+                   LEFT JOIN devices d ON d.id = f.device_id
+                   WHERE f.node_id = %s LIMIT 1""",
                 (node_id,),
             )
             if not file_info:
@@ -89,7 +92,8 @@ class Dispatcher:
                 self.db.mark_done(queue_id, error="registry_not_found")
                 return False
 
-            file_path = file_info[0]["path"]
+            # Risolve path assoluto (mount_root + path relativo, o path inalterato se gia\' assoluto)
+            file_path = self.db.resolve_file_path(file_info[0])
 
             # ─── Stage 1: EXIF (foto) ──────────────────────────
             exif_ok = False

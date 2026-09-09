@@ -107,6 +107,15 @@ class FileScanner:
             existing = self.db.get_file_by_sha256(meta.sha256)
             if existing:
                 logger.debug("FILE DUPLICATO (SHA-256): %s -> %s", path, existing['node_id'])
+                # Registra comunque la nuova posizione fisica (device diverso / mount diverso)
+                self.db.register_file_location(
+                    node_id=existing['node_id'],
+                    device=self.device_name,
+                    path=str(path.absolute()),
+                    size_bytes=meta.size_bytes,
+                    sha256=meta.sha256,
+                    mime_type=meta.mime_type,
+                )
                 result.node_id = existing['node_id']
                 result.skipped = True
                 result.skip_reason = "DUPLICATE"
@@ -411,9 +420,19 @@ class FileCreationHandler(watchdog.events.FileSystemEventHandler):
                 # 3. Dedup
                 existing = store.get_file_by_sha256(meta.sha256)
                 if existing:
+                    # Non crea nodo/edge/enqueue (sha256 identico = stesso contenuto),
+                    # MA registra la nuova posizione fisica se diversa da quella nota
+                    store.register_file_location(
+                        node_id=existing['node_id'],
+                        device=self.device_name,
+                        path=str(fpath.absolute()),
+                        size_bytes=meta.size_bytes,
+                        sha256=meta.sha256,
+                        mime_type=meta.mime_type,
+                    )
                     with self._lock:
-                        self.stats["files_skipped"] += 1
-                    logger.debug("WD DUPLICATE (SHA-256): %s", file_path)
+                        self.stats['files_skipped'] += 1
+                    logger.debug("WD DUPLICATE (SHA-256): %s -> registrata nuova posizione", file_path)
                     return
 
                 # 4. Crea nodo File
