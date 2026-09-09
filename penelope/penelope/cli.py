@@ -376,32 +376,37 @@ def cmd_db(args):
         """Verifica raggiungibilità fisica di ogni riga in file_registry.
 
         Per ogni riga:
-        1. Risolve path assoluto (mount_root + path relativo o path inalterato)
-        2. Controlla se il file esiste su disco (os.path.exists)
-        3. Aggiorna status (online/offline) e last_verified_at
+        1. Risolve mount per host corrente (device_mounts), fallback devices.mount_root
+        2. Se il device non ha mount registrato per QUESTO host → status 'unknown_from_host'
+        3. Altrimenti controlla se il file esiste localmente → online/offline
 
-        Non cancella MAI righe offline. Stampa un riepilogo per device.
+        Non cancella MAI righe. Aggiorna solo status + last_verified_at.
         """
         import os as _os
         import time as _time
 
+        current_host = MariaDBStore.current_hostname()
         db = MariaDBStore()
         with db as store:
-            # Query: file_registry + mount_root dal device (LEFT JOIN per backward compat)
+            # Query: file_registry + device + mount per host corrente (LEFT JOIN)
             sql = """
                 SELECT f.id, f.node_id, f.device, f.path, f.status,
-                       d.mount_root, d.label AS device_label
+                       f.device_id,
+                       d.mount_root AS device_mount_root,
+                       d.label AS device_label,
+                       dm.mount_root AS host_mount_root
                 FROM file_registry f
                 LEFT JOIN devices d ON d.id = f.device_id
+                LEFT JOIN device_mounts dm ON dm.device_id = f.device_id
+                    AND dm.hostname = %s
             """
-            params: tuple = ()
+            params: tuple = (current_host,)
             if args.device:
-                # Filtra per device label (stringa libera o device_id)
                 if args.device.isdigit():
                     sql += " WHERE f.device_id = %s"
                 else:
                     sql += " WHERE f.device = %s"
-                params = (args.device,)
+                params = params + (args.device,)
             sql += " ORDER BY f.device, f.path"
             if args.limit:
                 sql += " LIMIT %s"
@@ -416,28 +421,49 @@ def cmd_db(args):
         total = len(rows)
         online = 0
         offline = 0
+        unknown_host = 0
         skipped = 0  # path vuoti
         device_stats: dict[str, dict] = {}
 
-        print(f"\n[DB] Verifica raggiungibilità: {total} righe da controllare...\n")
+        print(f"\n[DB] Verifica raggiungibilità: {total} righe (host={current_host})...\n")
 
         t_start = _time.time()
         for i, row in enumerate(rows, 1):
             rid = row["id"]
             device_label = row.get("device_label") or row["device"]
-            path_raw = row["path"]
-            mount_root = row.get("mount_root")
+            path_raw = row.get("path", "")
+            host_mount_root = row.get("host_mount_root")
+            device_mount_root = row.get("device_mount_root")
 
             # Inizializza statistiche per device
             if device_label not in device_stats:
-                device_stats[device_label] = {"total": 0, "online": 0, "offline": 0, "mount_root": mount_root}
+                device_stats[device_label] = {
+                    "total": 0, "online": 0, "offline": 0,
+                    "unknown_from_host": 0,
+                    "host_mount_root": host_mount_root,
+                    "device_mount_root": device_mount_root,
+                }
             device_stats[device_label]["total"] += 1
+
+            # Caso 1: device con mount per host corrente → verifica esistenza
+            if host_mount_root:
+                mount_root = host_mount_root
+            elif device_mount_root:
+                # Fallback: mount globale (deprecato) — verifica comunque
+                mount_root = device_mount_root
+            else:
+                # Caso 2: NESSUN mount per questo host → non verificabile da qui
+                device_stats[device_label]["unknown_from_host"] += 1
+                unknown_host += 1
+                with db as store:
+                    store.verify_file_location_status(rid, "unknown_from_host")
+                continue
 
             # Risolve path assoluto
             if mount_root and not (path_raw.startswith("/") or path_raw.startswith("\\") or (len(path_raw) > 1 and path_raw[1] == ":")):
                 abs_path = str(Path(mount_root) / path_raw)
             else:
-                abs_path = path_raw  # già assoluto (old data) o mount_root sconosciuto
+                abs_path = path_raw  # gia' assoluto (old data)
 
             if not abs_path.strip():
                 device_stats[device_label]["offline"] += 1
@@ -461,31 +487,119 @@ def cmd_db(args):
 
             # Progress ogni 100 righe
             if i % 100 == 0:
-                print(f"   Progresso: {i}/{total} (online={online}, offline={offline})")
+                print(f"   Progresso: {i}/{total} (on={online}, off={offline}, ?host={unknown_host})")
 
         duration = _time.time() - t_start
 
         # ─── Report finale ──────────────────────────────────────
         print(f"\n{'='*60}")
-        print(f"  VERIFICA COMPLETATA ({duration:.1f}s)")
+        print(f"  VERIFICA COMPLETATA ({duration:.1f}s, host={current_host})")
         print(f"{'='*60}")
-        print(f"  Totale righe:           {total}")
-        print(f"  Online (file trovato):  {online}")
-        print(f"  Offline (file assente): {offline}")
+        print(f"  Totale righe:                  {total}")
+        print(f"  Online (file trovato):         {online}")
+        print(f"  Offline (file assente):        {offline}")
+        print(f"  Non verificabile da host:      {unknown_host}")
         if skipped:
-            print(f"  Saltati (path vuoto):   {skipped}")
+            print(f"  Saltati (path vuoto):          {skipped}")
         print()
 
         for dev_label, stats in sorted(device_stats.items()):
-            mr = stats["mount_root"] or "(path assoluto)"
+            mr = stats["host_mount_root"] or stats["device_mount_root"] or "N/A"
             print(f"  [{dev_label}]")
-            print(f"      mount_root: {mr}")
-            print(f"      totale:     {stats['total']}")
-            print(f"      online:     {stats['online']}")
-            print(f"      offline:    {stats['offline']}")
+            print(f"      mount_root (host): {mr}")
+            print(f"      totale:            {stats['total']}")
+            print(f"      online:            {stats['online']}")
+            print(f"      offline:           {stats['offline']}")
+            print(f"      unknown_from_host: {stats['unknown_from_host']}")
             if stats['total'] > 0:
                 pct = stats['online'] / stats['total'] * 100
-                print(f"      copertura:  {pct:.1f}%")
+                print(f"      copertura:         {pct:.1f}%")
+            print()
+
+
+def cmd_device(args):
+    """Gestione device e mount per-host (device_mounts)."""
+    from penelope.db.mariadb_store import MariaDBStore
+
+    db = MariaDBStore()
+
+    if args.action == "register":
+        """Registra un device (crea se non esiste) e registra mount per host corrente."""
+        label = args.label
+        mount_path = args.mount
+        device_type = args.type or "local"
+        volume_uuid = args.volume_uuid
+        hostname = args.hostname or MariaDBStore.current_hostname()
+
+        if not mount_path:
+            print("[DEVICE] Errore: --mount richiesto (path del mount su questo host).")
+            return
+
+        with db as store:
+            # 1. Trova o crea il device
+            device_id = store.ensure_device(
+                label=label,
+                device_type=device_type,
+                mount_root=None,  # non impostiamo il mount globale deprecato
+            )
+            if args.type:
+                store._execute(
+                    "UPDATE devices SET type = %s WHERE id = %s",
+                    (device_type, device_id),
+                )
+            if volume_uuid:
+                store._execute(
+                    "UPDATE devices SET volume_uuid = %s WHERE id = %s",
+                    (volume_uuid, device_id),
+                )
+
+            # 2. Upsert mount per host
+            mount_id = store.upsert_device_mount(device_id, hostname, mount_path)
+
+            print(f"[DEVICE] Registrato: {label} (id={device_id})")
+            print(f"   type:          {device_type}")
+            print(f"   volume_uuid:   {volume_uuid or '(non impostato)'}")
+            print(f"   mount (host):  {hostname} → {mount_path}")
+            print(f"   mount_id:      {mount_id}")
+            print()
+            print("   ⚠ Se il device esisteva già con mount globale (deprecato),")
+            print("     questo comando registra solo il mount per HOST. L'altro resta.")
+
+    elif args.action == "list":
+        """Mostra tutti i device con i mount per host."""
+        current_host = MariaDBStore.current_hostname()
+        with db as store:
+            devices = store.list_devices()
+            mounts = store.list_device_mounts()
+
+        if not devices:
+            print("[DEVICE] Nessun device registrato.")
+            return
+
+        # Raggruppa mount per device_id
+        mounts_by_device: dict[int, list] = {}
+        for m in mounts:
+            did = m["device_id"]
+            if did not in mounts_by_device:
+                mounts_by_device[did] = []
+            mounts_by_device[did].append(m)
+
+        print(f"\n[DEVICE] {len(devices)} device (host corrente: {current_host}):")
+        print()
+        for d in devices:
+            did = d["id"]
+            dmounts = mounts_by_device.get(did, [])
+            print(f"  [{d['label']}] (id={did}, type={d.get('type','local')})")
+            if d.get("volume_uuid"):
+                print(f"      volume_uuid: {d['volume_uuid']}")
+            if d.get("mount_root"):
+                print(f"      mount_root (GLOBALE, deprecato): {d['mount_root']}")
+            if dmounts:
+                for m in dmounts:
+                    marker = "  ◀ host corrente" if m["hostname"] == current_host else ""
+                    print(f"      host={m['hostname']:20s} mount={m['mount_root']}{marker}")
+            else:
+                print(f"      nessun mount registrato per host (usa 'device register')")
             print()
 
 
@@ -1130,6 +1244,17 @@ def main():
     p_db.add_argument("--device", default=None, help="Filtra verifica per device label")
     p_db.add_argument("--limit", type=int, default=0, help="Limite righe da verificare")
     p_db.set_defaults(func=cmd_db)
+
+    # device
+    p_dev = sub.add_parser("device", help="Gestione device e mount per-host")
+    p_dev.add_argument("action", choices=["register", "list"], help="Azione")
+    p_dev.add_argument("--label", default=None, help="Nome del device (per register)")
+    p_dev.add_argument("--mount", default=None, help="Path del mount su questo host (per register)")
+    p_dev.add_argument("--type", default=None, choices=["local", "external", "network", "server"],
+                       help="Tipo device (default: local)")
+    p_dev.add_argument("--volume-uuid", default=None, help="UUID del volume (opzionale)")
+    p_dev.add_argument("--hostname", default=None, help="Hostname per cui registrare il mount (default: host corrente)")
+    p_dev.set_defaults(func=cmd_device)
 
     # geo
     p_g = sub.add_parser("geo", help="Geocoding GPS (Nominatim)")

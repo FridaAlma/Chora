@@ -5,6 +5,8 @@ CRUD base per nodi, archi, file_registry e coda di ingestion.
 
 import json
 import logging
+import socket
+import os
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
@@ -129,6 +131,92 @@ class MariaDBStore:
     def delete_edge(self, edge_id: int) -> bool:
         sql = "DELETE FROM edges WHERE id = %s"
         return self._execute(sql, (edge_id,)) > 0
+
+    # ─── DEVICE MOUNTS (per-host) ────────────────────────────────
+
+    @staticmethod
+    def current_hostname() -> str:
+        """Hostname corrente, con override da env PENELOPE_HOSTNAME."""
+        return os.getenv("PENELOPE_HOSTNAME") or socket.gethostname()
+
+    def get_mount_root_for_host(self, device_id: int, hostname: Optional[str] = None) -> Optional[str]:
+        """Restituisce mount_root per un device su un host specifico.
+
+        Args:
+            device_id: ID del device.
+            hostname: Nome host (default: host corrente).
+
+        Returns:
+            mount_root se trovato in device_mounts, altrimenti None.
+        """
+        host = hostname or self.current_hostname()
+        rows = self._query(
+            "SELECT mount_root FROM device_mounts "
+            "WHERE device_id = %s AND hostname = %s LIMIT 1",
+            (device_id, host),
+        )
+        return rows[0]["mount_root"] if rows else None
+
+    def upsert_device_mount(self, device_id: int, hostname: str, mount_root: str) -> int:
+        """Inserisce o aggiorna mount per un device su un host.
+
+        Args:
+            device_id: ID del device.
+            hostname: Nome host (es. 'macbook', 'headless').
+            mount_root: Path del mount (es. '/Volumes/HDD').
+
+        Returns:
+            ID della riga.
+        """
+        self._execute(
+            "INSERT INTO device_mounts (device_id, hostname, mount_root, last_seen_at) "
+            "VALUES (%s, %s, %s, NOW()) "
+            "ON DUPLICATE KEY UPDATE mount_root = VALUES(mount_root), last_seen_at = NOW()",
+            (device_id, hostname, mount_root),
+        )
+        rows = self._query(
+            "SELECT id FROM device_mounts WHERE device_id = %s AND hostname = %s LIMIT 1",
+            (device_id, hostname),
+        )
+        return rows[0]["id"] if rows else 0
+
+    def list_device_mounts(self, device_id: Optional[int] = None) -> list[dict]:
+        """Lista montaggi per device (con hostname e mount_root).
+
+        Args:
+            device_id: Se fornito, filtra per device.
+
+        Returns:
+            Lista di dict: device_id, device_label, hostname, mount_root, last_seen_at.
+        """
+        sql = """SELECT dm.device_id, d.label AS device_label, dm.hostname, dm.mount_root, dm.last_seen_at
+                 FROM device_mounts dm
+                 JOIN devices d ON d.id = dm.device_id"""
+        params: tuple = ()
+        if device_id is not None:
+            sql += " WHERE dm.device_id = %s"
+            params = (device_id,)
+        sql += " ORDER BY d.label, dm.hostname"
+        return self._query(sql, params)
+
+    def resolve_mount_root(self, device_id: int) -> Optional[str]:
+        """Risolve mount_root per il device, preferendo device_mounts per host corrente.
+
+        Fallback a devices.mount_root (deprecato) se non trovato per host.
+
+        Args:
+            device_id: ID del device.
+
+        Returns:
+            mount_root risolto o None.
+        """
+        # 1. device_mounts per host corrente
+        mount = self.get_mount_root_for_host(device_id)
+        if mount:
+            return mount
+        # 2. Fallback a devices.mount_root (retrocompat)
+        dev = self.get_device(device_id)
+        return dev.get("mount_root") if dev else None
 
     # ─── DEVICES ────────────────────────────────────────────────
 
@@ -272,11 +360,8 @@ class MariaDBStore:
                 # Crea device con mount_root sconosciuto (sarà configurato dopo)
                 device_id = self.ensure_device(label=device)
 
-        # Recupera mount_root per il device
-        mount_root = None
-        dev_info = self.get_device(device_id)
-        if dev_info:
-            mount_root = dev_info.get("mount_root")
+        # Recupera mount_root per il device (per host corrente via device_mounts)
+        mount_root = self.resolve_mount_root(device_id)
 
         # Converte path in relativo se mount_root noto
         stored_path = self._compute_rel_path(path, mount_root)
@@ -305,7 +390,7 @@ class MariaDBStore:
         """
         dev = self.get_device_by_label(device)
         device_id = dev["id"] if dev else self.ensure_device(label=device)
-        mount_root = dev["mount_root"] if dev else None
+        mount_root = self.resolve_mount_root(device_id)
         stored_path = self._compute_rel_path(path, mount_root)
 
         # Verifica se già esiste (device + path + node_id)
@@ -331,33 +416,43 @@ class MariaDBStore:
     def get_file_registry_for_node(self, node_id: str) -> list[dict]:
         """Restituisce TUTTE le posizioni fisiche registrate per un nodo.
 
-        Arricchisce ogni riga con mount_root del device per ricostruire
-        il path assoluto.
+        Arricchisce ogni riga con mount_root per host corrente (device_mounts)
+        e fallback a devices.mount_root per retrocompat.
         """
         return self._query(
-            """SELECT f.*, d.mount_root, d.type AS device_type
+            """SELECT f.*, d.mount_root, d.type AS device_type,
+                      dm.mount_root AS host_mount_root
                FROM file_registry f
                LEFT JOIN devices d ON d.id = f.device_id
+               LEFT JOIN device_mounts dm ON dm.device_id = f.device_id
+                   AND dm.hostname = %s
                WHERE f.node_id = %s
                ORDER BY f.last_seen DESC""",
-            (node_id,),
+            (self.current_hostname(), node_id),
         )
 
     def resolve_file_path(self, registry_row: dict) -> str:
         """Ricostruisce il path assoluto del file da una riga file_registry.
 
-        Se il device ha mount_root, fa mount_root + path (relativo).
-        Altrimenti restituisce path inalterato (backward compat: path assoluto).
+        Risolve mount_root del device per host corrente (device_mounts).
+        Fallback a devices.mount_root (deprecato) se non trovato per host.
+        Se nessun mount_root, restituisce path inalterato (backward compat).
 
         Args:
-            registry_row: dict con chiavi 'path' e opzionalmente 'mount_root'.
+            registry_row: dict con chiavi 'path', 'device_id', opzionalmente
+                          'mount_root' (da devices) e 'host_mount_root' (da device_mounts).
 
         Returns:
             Path assoluto del file.
         """
         path = registry_row.get("path", "")
-        mount_root = registry_row.get("mount_root") or registry_row.get("device_mount_root")
-        if mount_root:
+        # Priorita': host_mount_root (device_mounts) > mount_root (devices, deprecato)
+        mount_root = (
+            registry_row.get("host_mount_root")
+            or registry_row.get("mount_root")
+            or registry_row.get("device_mount_root")
+        )
+        if mount_root and not registry_row.get("_already_resolved"):
             # Se path è già assoluto (vecchi dati), restituiscilo inalterato
             if path.startswith("/") or path.startswith("\\") or (len(path) > 1 and path[1] == ":"):
                 return path
@@ -398,6 +493,23 @@ class MariaDBStore:
     def verify_file_location(self, registry_id: int, is_online: bool) -> bool:
         """Aggiorna status e last_verified_at per una riga file_registry."""
         status = "online" if is_online else "offline"
+        return self._execute(
+            "UPDATE file_registry SET status = %s, last_verified_at = NOW(), last_seen = NOW() WHERE id = %s",
+            (status, registry_id),
+        ) > 0
+
+    def verify_file_location_status(self, registry_id: int, status: str) -> bool:
+        """Aggiorna status esplicito e last_verified_at per una riga file_registry.
+
+        Args:
+            registry_id: ID riga file_registry.
+            status: 'online', 'offline' o 'unknown_from_host'.
+
+        Returns:
+            True se aggiornato.
+        """
+        if status not in ("online", "offline", "unknown_from_host"):
+            raise ValueError(f"Status non valido: {status}")
         return self._execute(
             "UPDATE file_registry SET status = %s, last_verified_at = NOW(), last_seen = NOW() WHERE id = %s",
             (status, registry_id),
