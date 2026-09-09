@@ -974,6 +974,81 @@
         // Build content
         let html = '';
 
+        // ── FILE PREVIEW ─────────────────────────────────
+        // Fetch file info to determine preview type
+        let fileInfo = null;
+        try {
+          const fiResp = await fetch(PENELOPE_API + '/api/files/' + encodeURIComponent(docId) + '/info');
+          if (fiResp.ok) fileInfo = await fiResp.json();
+        } catch(e) {}
+
+        if (fileInfo && fileInfo.exists) {
+          const mime = fileInfo.mime_type || '';
+          const ext = (fileInfo.extension || '').toLowerCase();
+
+          html += '<div class="rule"></div>';
+
+          // Image preview
+          if (mime.startsWith('image/') || ['.jpg','.jpeg','.png','.gif','.webp','.bmp','.svg'].includes(ext)) {
+            html += '<div style="text-align:center;margin:20px 0">';
+            html += '<img src="' + PENELOPE_API + '/api/files/' + encodeURIComponent(docId) + '/preview"';
+            html += ' alt="' + escapeHtml(name) + '" style="max-width:100%;max-height:70vh;border-radius:10px;border:1px solid var(--border);box-shadow:var(--shadow);cursor:zoom-in"';
+            html += ' onclick="window.open(this.src,\'_blank\')" />';
+            html += '</div>';
+          }
+
+          // Video preview
+          else if (mime.startsWith('video/') || ['.mp4','.webm','.mov','.avi','.mkv'].includes(ext)) {
+            html += '<div style="margin:20px 0">';
+            html += '<video controls style="width:100%;max-height:70vh;border-radius:10px;border:1px solid var(--border);background:#000">';
+            html += '<source src="' + PENELOPE_API + '/api/files/' + encodeURIComponent(docId) + '/preview" type="' + escapeHtml(mime || 'video/mp4') + '">';
+            html += 'Your browser does not support video playback.';
+            html += '</video></div>';
+          }
+
+          // Audio preview
+          else if (mime.startsWith('audio/') || ['.mp3','.wav','.ogg','.flac','.m4a'].includes(ext)) {
+            html += '<div style="margin:20px 0;padding:20px;background:var(--surface-2);border-radius:10px;text-align:center">';
+            html += '<audio controls style="width:100%" src="' + PENELOPE_API + '/api/files/' + encodeURIComponent(docId) + '/preview"></audio>';
+            html += '</div>';
+          }
+
+          // Text preview (fetch content inline)
+          else if (mime.startsWith('text/') || ['.txt','.md','.csv','.json','.xml','.py','.js','.css','.html','.log'].includes(ext)) {
+            html += '<div style="margin:20px 0">';
+            html += '<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.7;background:var(--surface-2);padding:20px 24px;border-radius:10px;border:1px solid var(--border);overflow-x:auto;max-height:500px;overflow-y:auto;white-space:pre-wrap;word-break:break-word"';
+            html += ' id="textPreview-' + escapeHtml(docId) + '">Loading text content...</div>';
+            html += '</div>';
+
+            // Fetch text content asynchronously
+            (function(pid) {
+              fetch(PENELOPE_API + '/api/files/' + encodeURIComponent(pid) + '/preview')
+                .then(r => r.text())
+                .then(txt => {
+                  const el = document.getElementById('textPreview-' + pid);
+                  if (el) el.textContent = txt.slice(0, 10000);
+                })
+                .catch(() => {});
+            })(docId);
+          }
+
+          // PDF preview (embed)
+          else if (mime === 'application/pdf' || ext === '.pdf') {
+            html += '<div style="margin:20px 0">';
+            html += '<embed src="' + PENELOPE_API + '/api/files/' + encodeURIComponent(docId) + '/preview" type="application/pdf" style="width:100%;height:70vh;border-radius:10px;border:1px solid var(--border)" />';
+            html += '</div>';
+          }
+
+          // Download button
+          html += '<div style="text-align:center;margin:10px 0 24px">';
+          html += '<a href="' + PENELOPE_API + '/api/files/' + encodeURIComponent(docId) + '/download"';
+          html += ' style="display:inline-flex;align-items:center;gap:8px;padding:8px 18px;background:var(--accent);color:#fff;border-radius:8px;text-decoration:none;font-size:13px"';
+          html += ' download>';
+          html += '<span style="font-size:16px">⬇</span> Download';
+          if (fileInfo.size_bytes) html += ' (' + formatBytes(fileInfo.size_bytes) + ')';
+          html += '</a></div>';
+        }
+
         // Description from metadata
         if (meta.description) {
           html += '<p>' + escapeHtml(meta.description) + '</p>';

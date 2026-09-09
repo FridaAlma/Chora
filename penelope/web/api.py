@@ -925,46 +925,134 @@ def api_events_calendar():
         return jsonify({"error": str(e)}), 500
 
 
-# ─── Main ──────────────────────────────────────────────────────────
-
-# ─── API: Servi immagine da node_id ────────────────────────────────
+# ─── Helper: risolve file path dal node_id ────────────────────────
 
 
-@app.route("/api/images/<node_id>")
-def api_image(node_id):
-    """Serve un'immagine dal file_registry dato il node_id."""
+def _resolve_file_path(node_id: str) -> tuple[Optional[Path], Optional[str], Optional[str]]:
+    """Dato un node_id, risolve file path assoluto, mime_type e device.
+
+    Returns:
+        (path, mime_type, device) oppure (None, None, None) se non trovato.
+    """
     cur = _get_cursor()
-    try:
-        cur.execute("""
-            SELECT f.path, d.mount_root
-            FROM file_registry f
-            LEFT JOIN devices d ON d.id = f.device_id
-            WHERE f.node_id = %s
-        """, (node_id,))
-        row = cur.fetchone()
-        if not row:
-            return jsonify({"error": "Immagine non trovata"}), 404
+    cur.execute("""
+        SELECT f.path, d.mount_root, f.mime_type, f.device
+        FROM file_registry f
+        LEFT JOIN devices d ON d.id = f.device_id
+        WHERE f.node_id = %s
+        LIMIT 1
+    """, (node_id,))
+    row = cur.fetchone()
+    if not row:
+        return None, None, None
 
-        # Risolve path assoluto (mount_root + path relativo, o path inalterato se già assoluto)
-        raw_path = row["path"]
-        mount_root = row.get("mount_root")
-        if mount_root and not (raw_path.startswith("/") or raw_path.startswith("\\") or (len(raw_path) > 1 and raw_path[1] == ":")):
-            path = Path(mount_root) / raw_path
-        else:
-            path = Path(raw_path)
+    raw_path = row["path"]
+    mount_root = row.get("mount_root")
+    mime_type = row.get("mime_type") or ""
+    device = row.get("device") or ""
 
-        if not path.exists():
-            # Prova con path inalterato (fallback per backward compat)
-            path = Path(raw_path)
-            if not path.exists():
-                return jsonify({"error": "File immagine non trovato su disco"}), 404
+    # Risolve path assoluto
+    if mount_root and not (raw_path.startswith("/") or raw_path.startswith("\\") or (len(raw_path) > 1 and raw_path[1] == ":")):
+        path = Path(mount_root) / raw_path
+    else:
+        path = Path(raw_path)
 
-        from flask import send_file
-        return send_file(str(path))
+    # Fallback: se il file non esiste, prova path inalterato (backward compat)
+    if not path.exists():
+        path = Path(raw_path)
 
-    except Exception as e:
-        logger.error("Errore immagine: %s", e)
-        return jsonify({"error": str(e)}), 500
+    return path if path.exists() else None, mime_type or _guess_mime_from_ext(path), device
+
+
+_EXT_MIME_MAP = {
+    ".jpg": "image/jpeg",".jpeg": "image/jpeg",".png": "image/png",
+    ".gif": "image/gif",".webp": "image/webp",".bmp": "image/bmp",
+    ".svg": "image/svg+xml",".ico": "image/x-icon",
+    ".mp4": "video/mp4",".webm": "video/webm",".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",".mkv": "video/x-matroska",
+    ".mp3": "audio/mpeg",".wav": "audio/wav",".ogg": "audio/ogg",
+    ".flac": "audio/flac",".m4a": "audio/mp4",
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",".md": "text/markdown",".csv": "text/csv",
+    ".json": "application/json",".xml": "application/xml",".html": "text/html",
+    ".py": "text/x-python",".js": "text/javascript",".css": "text/css",
+    ".zip": "application/zip",".tar": "application/x-tar",
+    ".doc": "application/msword",".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
+def _guess_mime_from_ext(path: Path) -> str:
+    """Indovina MIME type dall'estensione come fallback."""
+    ext = path.suffix.lower()
+    return _EXT_MIME_MAP.get(ext, "application/octet-stream")
+
+
+# ─── API: Preview file (inline, per browser) ──────────────────────
+
+
+@app.route("/api/files/<node_id>/preview")
+def api_file_preview(node_id):
+    """Serve un file inline per anteprima nel browser (immagini, video, audio, testo)."""
+    path, mime_type, device = _resolve_file_path(node_id)
+    if not path:
+        return jsonify({"error": "File non trovato su disco"}), 404
+
+    from flask import send_file
+    return send_file(
+        str(path),
+        mimetype=mime_type,
+        as_attachment=False,
+        download_name=path.name,
+    )
+
+
+# ─── API: Download file ───────────────────────────────────────────
+
+
+@app.route("/api/files/<node_id>/download")
+def api_file_download(node_id):
+    """Serve un file come download (Content-Disposition: attachment)."""
+    path, mime_type, device = _resolve_file_path(node_id)
+    if not path:
+        return jsonify({"error": "File non trovato su disco"}), 404
+
+    from flask import send_file
+    return send_file(
+        str(path),
+        mimetype=mime_type or "application/octet-stream",
+        as_attachment=True,
+        download_name=path.name,
+    )
+
+
+# ─── API: Info file (per frontend) ───────────────────────────────
+
+
+@app.route("/api/files/<node_id>/info")
+def api_file_info(node_id):
+    """Restituisce metadati del file fisico (path, mime, size, esiste)."""
+    path, mime_type, device = _resolve_file_path(node_id)
+    if not path:
+        return jsonify({"error": "File non trovato su disco", "exists": False}), 404
+
+    import os as _os
+    stat = _os.stat(str(path))
+    ext = path.suffix.lower()
+
+    previewable = ext in _EXT_MIME_MAP or (mime_type and mime_type.startswith(("image/", "video/", "audio/", "text/")))
+
+    return jsonify({
+        "exists": True,
+        "path": str(path),
+        "name": path.name,
+        "mime_type": mime_type or _guess_mime_from_ext(path),
+        "size_bytes": stat.st_size,
+        "extension": ext,
+        "device": device,
+        "previewable": previewable,
+        "preview_url": f"/api/files/{node_id}/preview",
+        "download_url": f"/api/files/{node_id}/download",
+    })
 
 
 # ─── Pre-carica i modelli di embedding all'avvio ──────────────
