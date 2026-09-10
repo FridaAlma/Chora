@@ -291,6 +291,138 @@ class MariaDBStore:
         """Lista di tutti i device."""
         return self._query("SELECT * FROM devices ORDER BY label")
 
+    @staticmethod
+    def _normalize_row(row: dict) -> dict:
+        """Normalizza le chiavi di un dict a lowercase (MariaDB DictCursor restituisce maiuscolo su Linux)."""
+        return {k.lower(): v for k, v in row.items()}
+
+    @staticmethod
+    def _normalize_rows(rows: list[dict]) -> list[dict]:
+        return [MariaDBStore._normalize_row(r) for r in rows]
+
+    def merge_devices(self, keep_id: int, remove_id: int) -> dict:
+        """Fonde un device (remove_id) in un altro (keep_id) in una transazione.
+
+        Operazioni:
+          1. UPDATE file_registry SET device_id = keep_id WHERE device_id = remove_id
+          2. Copia device_mounts di remove_id su keep_id (solo hostname non già presenti)
+          3. Cancella device_mounts di remove_id
+          4. Cancella riga devices di remove_id
+
+        Args:
+            keep_id: ID del device che rimane.
+            remove_id: ID del device da cancellare (dopo merge).
+
+        Returns:
+            Dict con: file_registry_updated, mounts_copied, mounts_removed,
+                      mount_paths (lista path per marker rewrite),
+                      keep_label, keep_type.
+
+        Raises:
+            ValueError: se keep_id == remove_id o uno dei due non esiste.
+        """
+        if keep_id == remove_id:
+            raise ValueError("keep_id e remove_id devono essere diversi")
+
+        conn = self.connect()
+        result: dict = {
+            "file_registry_updated": 0,
+            "mounts_copied": 0,
+            "mounts_removed": 0,
+            "mount_paths": [],
+            "keep_label": "",
+            "keep_type": "",
+            "remove_label": "",
+            "remove_type": "",
+        }
+
+        with conn.cursor() as cur:
+            try:
+                # ── Verifica esistenza device (con normalize chiavi) ──
+                cur.execute(
+                    "SELECT label, type FROM devices WHERE id = %s", (keep_id,)
+                )
+                keep_row = self._normalize_row(cur.fetchone())
+                if not keep_row:
+                    raise ValueError(f"Device keep_id={keep_id} non trovato")
+                result["keep_label"] = keep_row["label"]
+                result["keep_type"] = keep_row["type"]
+
+                cur.execute(
+                    "SELECT label, type FROM devices WHERE id = %s", (remove_id,)
+                )
+                remove_row = self._normalize_row(cur.fetchone())
+                if not remove_row:
+                    raise ValueError(f"Device remove_id={remove_id} non trovato")
+                result["remove_label"] = remove_row["label"]
+                result["remove_type"] = remove_row["type"]
+
+                # ── 1. Conta e aggiorna file_registry ──
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM file_registry WHERE device_id = %s",
+                    (remove_id,),
+                )
+                fr_count = self._normalize_row(cur.fetchone())
+                result["file_registry_updated"] = int(fr_count["cnt"])
+
+                if result["file_registry_updated"] > 0:
+                    cur.execute(
+                        "UPDATE file_registry SET device_id = %s WHERE device_id = %s",
+                        (keep_id, remove_id),
+                    )
+                    logger.info(
+                        "merge_devices: riassegnate %d righe file_registry %s -> %s",
+                        result["file_registry_updated"], remove_id, keep_id,
+                    )
+
+                # ── 2. Recupera mount di remove_id (prima della cancellazione) ──
+                cur.execute(
+                    "SELECT hostname, mount_root FROM device_mounts WHERE device_id = %s",
+                    (remove_id,),
+                )
+                remove_mounts = self._normalize_rows(cur.fetchall())
+                result["mount_paths"] = [m["mount_root"] for m in remove_mounts if m.get("mount_root")]
+
+                # ── 3. Copia mount non già presenti per keep_id ──
+                for m in remove_mounts:
+                    cur.execute(
+                        "SELECT id FROM device_mounts WHERE device_id = %s AND hostname = %s",
+                        (keep_id, m["hostname"]),
+                    )
+                    if not cur.fetchone():
+                        cur.execute(
+                            "INSERT INTO device_mounts (device_id, hostname, mount_root, last_seen_at) "
+                            "VALUES (%s, %s, %s, NOW())",
+                            (keep_id, m["hostname"], m["mount_root"]),
+                        )
+                        result["mounts_copied"] += 1
+
+                # ── 4. Cancella mount di remove_id ──
+                cur.execute(
+                    "DELETE FROM device_mounts WHERE device_id = %s",
+                    (remove_id,),
+                )
+                result["mounts_removed"] = cur.rowcount
+
+                # ── 5. Cancella il device remove ──
+                cur.execute(
+                    "DELETE FROM devices WHERE id = %s",
+                    (remove_id,),
+                )
+                logger.info(
+                    "merge_devices: device %s (id=%s) eliminato, fuso in %s (id=%s)",
+                    result["remove_label"], remove_id,
+                    result["keep_label"], keep_id,
+                )
+
+                conn.commit()
+
+            except Exception:
+                conn.rollback()
+                raise
+
+        return result
+
     def get_device_stats(self) -> list[dict]:
         """Statistiche per device: label, online, offline, totale righe."""
         return self._query(

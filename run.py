@@ -439,29 +439,77 @@ def cmd_init(path: str | None = None):
 
         marker = read_device_marker(storage_path)
 
-        if marker is None:
-            # Nuovo device: crea in DB, scrive marker, upsert mount
-            with db as store:
-                device_id = store.ensure_device(
-                    label=label_key,
-                    device_type='local',
-                )
-            ok = write_device_marker(storage_path, device_id, label_key)
-            if not ok:
-                print(f'   [WARN] Marker non scritto (permessi su {storage_path})')
-            else:
-                print(f'   [OK]  Marker scritto: {storage_path}/.penelope_device.json')
-            with db as store:
-                store.upsert_device_mount(device_id, hostname, str(storage_path))
-            print(f'   [OK]  Device "{label_key}" (id={device_id}) creato e mount registrato')
-            print(f'         per host "{hostname}" → {storage_path}')
-        else:
-            # Device già noto: solo upsert mount per host corrente
+        if marker is not None:
+            # ── Device già noto via marker ──
             device_id = marker['device_id']
             with db as store:
                 store.upsert_device_mount(device_id, hostname, str(storage_path))
             print(f'   [OK]  Device "{label_key}" (id={device_id}) — mount aggiornato')
             print(f'         per host "{hostname}" → {storage_path}')
+        else:
+            # ── Marker assente: cerca device già registrato per questo path ──
+            existing_device = None
+            with db as store:
+                # 1. device_mounts per host corrente
+                rows = store._query(
+                    "SELECT dm.device_id, d.type, d.label FROM device_mounts dm "
+                    "JOIN devices d ON d.id = dm.device_id "
+                    "WHERE dm.mount_root = %s AND dm.hostname = %s LIMIT 1",
+                    (str(storage_path), hostname),
+                )
+                if rows:
+                    existing_device = rows[0]
+                else:
+                    # 2. device_mounts su qualsiasi host
+                    rows = store._query(
+                        "SELECT dm.device_id, d.type, d.label FROM device_mounts dm "
+                        "JOIN devices d ON d.id = dm.device_id "
+                        "WHERE dm.mount_root = %s LIMIT 1",
+                        (str(storage_path),),
+                    )
+                    if rows:
+                        existing_device = rows[0]
+                    else:
+                        # 3. mount_root deprecato nella tabella devices
+                        rows = store._query(
+                            "SELECT id, type, label FROM devices WHERE mount_root = %s LIMIT 1",
+                            (str(storage_path),),
+                        )
+                        if rows:
+                            existing_device = rows[0]
+
+            if existing_device:
+                # ── Device esiste già in DB (ma marker mancante) ──
+                dev_id: int = existing_device.get('device_id') or existing_device['id']
+                dev_type: str = existing_device.get('type', 'local')
+                dev_label: str = existing_device.get('label', label_key)
+
+                ok = write_device_marker(storage_path, dev_id, dev_label)
+                if not ok:
+                    print(f'   [WARN] Marker non scritto (permessi su {storage_path})')
+                else:
+                    print(f'   [OK]  Marker scritto: {storage_path}/.penelope_device.json')
+
+                with db as store:
+                    store.upsert_device_mount(dev_id, hostname, str(storage_path))
+                print(f'   [OK]  Device "{dev_label}" (id={dev_id}, type={dev_type}) — riutilizzato')
+                print(f'         mount aggiornato per host "{hostname}" → {storage_path}')
+            else:
+                # ── Device davvero nuovo: crea, scrive marker, upsert mount ──
+                with db as store:
+                    device_id = store.ensure_device(
+                        label=label_key,
+                        device_type='local',
+                    )
+                ok = write_device_marker(storage_path, device_id, label_key)
+                if not ok:
+                    print(f'   [WARN] Marker non scritto (permessi su {storage_path})')
+                else:
+                    print(f'   [OK]  Marker scritto: {storage_path}/.penelope_device.json')
+                with db as store:
+                    store.upsert_device_mount(device_id, hostname, str(storage_path))
+                print(f'   [OK]  Device "{label_key}" (id={device_id}) creato e mount registrato')
+                print(f'         per host "{hostname}" → {storage_path}')
 
     except ImportError as e:
         print(f'   [SKIP] Device registration non disponibile: {e}')

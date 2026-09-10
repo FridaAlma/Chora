@@ -556,6 +556,10 @@ def cmd_device(args):
             # 2. Upsert mount per host
             mount_id = store.upsert_device_mount(device_id, hostname, mount_path)
 
+            # 3. Scrivi marker .penelope_device.json per reconcile_devices()
+            from penelope.discovery import write_device_marker
+            write_device_marker(mount_path, device_id, label)
+
             print(f"[DEVICE] Registrato: {label} (id={device_id})")
             print(f"   type:          {device_type}")
             print(f"   volume_uuid:   {volume_uuid or '(non impostato)'}")
@@ -601,6 +605,124 @@ def cmd_device(args):
             else:
                 print(f"      nessun mount registrato per host (usa 'device register')")
             print()
+
+    elif args.action == "merge":
+        """Fonde un device in un altro: unifica file_registry, mount e marker."""
+        from penelope.discovery import write_device_marker
+
+        keep_id = args.keep
+        remove_id = args.remove
+
+        if not keep_id or not remove_id:
+            print("[MERGE] Errore: --keep e --remove sono obbligatori.")
+            print("  Esempio: penelope device merge --keep 5 --remove 6")
+            return
+
+        if keep_id == remove_id:
+            print("[MERGE] Errore: keep e remove devono essere diversi.")
+            return
+
+        with db as store:
+            # ── Fase 1: dry-run (raccolta info) ──
+            keep_dev = store.get_device(keep_id)
+            remove_dev = store.get_device(remove_id)
+
+            if not keep_dev:
+                print(f"[MERGE] Errore: device keep_id={keep_id} non trovato.")
+                return
+            if not remove_dev:
+                print(f"[MERGE] Errore: device remove_id={remove_id} non trovato.")
+                return
+
+            # Conteggio file_registry
+            fr_rows = store._query(
+                "SELECT COUNT(*) AS cnt FROM file_registry WHERE device_id = %s",
+                (remove_id,),
+            )
+            fr_count = fr_rows[0]["cnt"] if fr_rows else 0
+
+            # Mount di remove_id
+            remove_mounts = store.list_device_mounts(device_id=remove_id)
+            # Mount di keep_id (per sapere quali conflitti ci sono)
+            keep_mounts = store.list_device_mounts(device_id=keep_id)
+
+            # Marker file attuali
+            from penelope.discovery import read_device_marker
+
+            marker_info = {}
+            for m in remove_mounts:
+                path = m.get("mount_root")
+                if path:
+                    marker_info[path] = read_device_marker(path)
+
+        # ── Report dry-run ──
+        print()
+        print("=" * 70)
+        print("  DEVICE MERGE — DRY RUN")
+        print("=" * 70)
+        print()
+        print(f"  Da MANTENERE (keep):   [{keep_dev['label']}] (id={keep_id}, type={keep_dev['type']})")
+        print(f"  Da ELIMINARE (remove): [{remove_dev['label']}] (id={remove_id}, type={remove_dev['type']})")
+        print()
+        print(f"  Righe file_registry da riassegnare: {fr_count}")
+        print()
+        if remove_mounts:
+            print("  Mount di remove_id (copiati in keep_id se non già presenti):")
+            for m in remove_mounts:
+                already = "⚠ GIA' PRESENTE" if any(
+                    km["hostname"] == m["hostname"]
+                    for km in keep_mounts
+                ) else "→ da copiare"
+                print(f"    host={m['hostname']:20s} mount={m['mount_root']}  {already}")
+        else:
+            print("  Mount di remove_id: nessuno")
+        print()
+        for path, marker in marker_info.items():
+            if marker:
+                print(f"  Marker su {path}/.penelope_device.json:")
+                print(f"      device_id={marker['device_id']}, label={marker['label']}")
+                print(f"      → sarà riscritto come device_id={keep_id}, label={keep_dev['label']}")
+            else:
+                print(f"  Marker su {path}/.penelope_device.json: ASSENTE (verrà creato)")
+        print()
+        print(f"  Dopo il merge: il device [{remove_dev['label']}] (id={remove_id}) "
+              "sarà cancellato.")
+        print()
+        print("=" * 70)
+        print()
+
+        # ── Fase 2: conferma ──
+        if not args.yes:
+            confirm = input("  Continuare con il merge? (s/N): ").strip().lower()
+            if confirm not in ("s", "si", "y", "yes"):
+                print("  Annullato.")
+                return
+
+        # ── Fase 3: esecuzione ──
+        print()
+        print("  Esecuzione merge...")
+        print()
+
+        with db as store:
+            result = store.merge_devices(keep_id, remove_id)
+            mount_paths = result.get("mount_paths", [])
+
+        # ── Fase 4: rewrite marker suogni mount noto del vecchio device ──
+        for path in mount_paths:
+            ok = write_device_marker(path, keep_id, keep_dev["label"])
+            if ok:
+                print(f"  [OK] Marker riscritto: {path}/.penelope_device.json → "
+                      f"device_id={keep_id}, label={keep_dev['label']}")
+            else:
+                print(f"  [WARN] Marker non scritto su {path}")
+
+        print()
+        print(f"  Merge completato.")
+        print(f"    file_registry riassegnate: {result['file_registry_updated']}")
+        print(f"    mounts copiati:             {result['mounts_copied']}")
+        print(f"    mounts rimossi:             {result['mounts_removed']}")
+        print(f"    marker riscritti:           {len(mount_paths)}")
+        print()
 
 
 def cmd_geo(args):
@@ -1247,13 +1369,16 @@ def main():
 
     # device
     p_dev = sub.add_parser("device", help="Gestione device e mount per-host")
-    p_dev.add_argument("action", choices=["register", "list"], help="Azione")
+    p_dev.add_argument("action", choices=["register", "list", "merge"], help="Azione")
     p_dev.add_argument("--label", default=None, help="Nome del device (per register)")
     p_dev.add_argument("--mount", default=None, help="Path del mount su questo host (per register)")
     p_dev.add_argument("--type", default=None, choices=["local", "external", "network", "server"],
                        help="Tipo device (default: local)")
     p_dev.add_argument("--volume-uuid", default=None, help="UUID del volume (opzionale)")
     p_dev.add_argument("--hostname", default=None, help="Hostname per cui registrare il mount (default: host corrente)")
+    p_dev.add_argument("--keep", type=int, default=None, help="ID del device da mantenere (per merge)")
+    p_dev.add_argument("--remove", type=int, default=None, help="ID del device da eliminare (per merge)")
+    p_dev.add_argument("--yes", action="store_true", help="Salta conferma interattiva (per merge)")
     p_dev.set_defaults(func=cmd_device)
 
     # geo
