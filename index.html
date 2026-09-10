@@ -905,11 +905,19 @@
     let toastTimer;
 
     // ─── Navigation ────────────────────────────────────────────
+    let graphLoaded = false;
+
     function navigate(page) {
       pages.forEach(p => p.classList.toggle('active', p.id === page));
       buttons.forEach(b => b.classList.toggle('active', b.dataset.page === page));
       pageTitle.textContent = page.charAt(0).toUpperCase() + page.slice(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Lazy-load graph when first visited
+      if (page === 'graph' && !graphLoaded) {
+        graphLoaded = true;
+        fetchGraph();
+      }
     }
     buttons.forEach(b => b.addEventListener('click', () => navigate(b.dataset.page)));
 

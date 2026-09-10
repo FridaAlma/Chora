@@ -141,10 +141,31 @@ def _reconcile_and_scan() -> None:
 
             def _scan(dev_label: str, mp: str) -> None:
                 try:
-                    logger.info("Auto-scan avviato: %s (%s)", dev_label, mp)
-                    scanner = FileScanner(device_name=dev_label)
-                    scanner.scan_directory(mp, project_label=dev_label)
-                    logger.info("Auto-scan completato: %s", dev_label)
+                    from pathlib import Path
+
+                    root = Path(mp)
+                    subdirs = [d for d in root.iterdir() if d.is_dir()]
+
+                    if subdirs:
+                        logger.info(
+                            "Auto-scan avviato: %s (%s) — %d sottocartelle",
+                            dev_label, mp, len(subdirs),
+                        )
+                        scanner = FileScanner(device_name=dev_label)
+                        for sd in subdirs:
+                            scanner.scan_directory(str(sd), project_label=sd.name)
+                        logger.info(
+                            "Auto-scan completato: %s — %d progetti processati",
+                            dev_label, len(subdirs),
+                        )
+                    else:
+                        logger.info(
+                            "Auto-scan avviato: %s (%s) — nessuna sottocartella, scan radice",
+                            dev_label, mp,
+                        )
+                        scanner = FileScanner(device_name=dev_label)
+                        scanner.scan_directory(mp, project_label=dev_label)
+                        logger.info("Auto-scan completato: %s", dev_label)
                 except Exception as e:
                     logger.warning("Auto-scan fallito per %s (%s): %s", dev_label, mp, e)
 
