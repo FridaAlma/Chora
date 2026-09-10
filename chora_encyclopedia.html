@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CHORA — Enciclopedia Completa</title>
+<style>
+:root{--bg:#f6f6f3;--surface:#fbfbf9;--surface2:#eeeeeb;--line:#deded9;--line2:#c9c9c2;--text:#171816;--muted:#73756f;--accent:#526b63;--accent-soft:#e2e9e6;--radius:14px;--ease:cubic-bezier(.22,1,.36,1);--sidebar:260px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 Inter,-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}button,input{font:inherit}
+.sidebar{position:fixed;inset:0 auto 0 0;width:var(--sidebar);padding:24px 14px 20px;border-right:1px solid var(--line);background:rgba(246,246,243,.92);backdrop-filter:blur(18px);z-index:10;display:flex;flex-direction:column;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:10px;padding:0 10px 24px}.mark{width:25px;height:25px;border:1px solid var(--text);border-radius:50%;position:relative;flex-shrink:0}.mark:before,.mark:after{content:"";position:absolute;border:1px solid var(--accent);border-radius:50%;inset:4px}.mark:after{inset:8px;border-color:var(--text)}.brand-name{font-size:14px;font-weight:650;letter-spacing:.12em;white-space:nowrap}.version{font:9px monospace;color:var(--muted);margin-left:auto}
+.nav-label{padding:6px 10px 6px;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.12em;margin-top:4px}.nav{display:flex;flex-direction:column;gap:1px}.nav a{border:0;background:transparent;border-radius:7px;padding:6px 10px;display:flex;align-items:center;gap:8px;cursor:pointer;text-align:left;color:var(--muted);text-decoration:none;transition:.2s ease;font-size:12.5px}.nav a:hover{background:var(--surface2);color:var(--text);transform:translateX(2px)}.nav a.active{background:var(--accent-soft);color:var(--text)}.nav .ico{width:16px;text-align:center;opacity:.7;font-size:12px}
+.foot{margin-top:auto;padding:12px 10px 0;border-top:1px solid var(--line);font-size:9px;color:var(--muted)}.status-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);margin-right:6px}
+main{margin-left:var(--sidebar)}.topbar{position:sticky;top:0;height:60px;padding:0 36px;border-bottom:1px solid var(--line);background:rgba(246,246,243,.85);backdrop-filter:blur(18px);z-index:9;display:flex;align-items:center;justify-content:space-between}.crumbs{color:var(--muted);font-size:11px;display:flex;gap:6px}.crumbs strong{color:var(--text);font-weight:550}.back-btn{display:flex;align-items:center;gap:6px;color:var(--accent);text-decoration:none;font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);transition:.2s}.back-btn:hover{background:#fff;border-color:var(--line2)}
+.search{width:220px;height:33px;border:1px solid var(--line);border-radius:7px;background:var(--surface);display:flex;align-items:center;gap:7px;padding:0 10px;transition:.35s var(--ease)}.search:focus-within{width:300px;border-color:var(--line2);box-shadow:0 0 0 3px rgba(82,107,99,.07)}.search input{width:100%;border:0;outline:0;background:transparent;font-size:12px}.search span{color:var(--muted)}
+.content{display:none;max-width:1100px;margin:0 auto;padding:40px 36px 80px;animation:enter .4s var(--ease)}.content.active{display:block}@keyframes enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.section{margin-bottom:60px;scroll-margin-top:70px}.section h2{font-size:clamp(22px,3vw,32px);font-weight:620;letter-spacing:-.03em;margin:0 0 6px;padding-top:10px}.section h2 .num{color:var(--muted);font-size:14px;font-weight:400;margin-right:8px}.section .subtitle{color:var(--muted);font-size:12px;margin-bottom:24px}.section h3{font-size:16px;font-weight:570;margin:28px 0 8px;letter-spacing:-.01em}.section h4{font-size:14px;font-weight:550;margin:20px 0 6px}.section p{color:#3c3e38;line-height:1.75;margin:0 0 12px;max-width:780px}.section ul,.section ol{padding-left:22px;color:#3c3e38;line-height:1.75;margin:6px 0 16px}.section li{margin-bottom:4px}.section code{background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.section pre{background:#20221f;color:#e9ebe6;border-radius:10px;padding:16px 18px;overflow:auto;font:11px/1.7 ui-monospace,monospace;margin:12px 0 20px;max-width:100%}.section pre code{background:transparent;padding:0;color:inherit;font-size:inherit}.section blockquote{border-left:3px solid var(--accent);margin:16px 0;padding:8px 16px;color:var(--muted);background:var(--surface2);border-radius:0 8px 8px 0}.section table{border-collapse:collapse;width:100%;margin:12px 0 20px;font-size:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}.section th,.section td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line)}.section th{background:var(--surface2);font-weight:550;color:var(--text);font-size:11px;text-transform:uppercase;letter-spacing:.05em}.section tr:last-child td{border-bottom:0}.section hr{border:0;height:1px;background:var(--line);margin:40px 0}
+.toc{margin-bottom:50px}.toc h3{font-size:15px;font-weight:600;margin-bottom:12px}.toc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px}.toc-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);text-decoration:none;color:var(--text);transition:.2s ease;font-size:13px}.toc-item:hover{background:#fff;border-color:var(--line2);transform:translateY(-1px)}.toc-item .num{color:var(--accent);font-size:12px;font-weight:600;width:28px;text-align:right;flex-shrink:0}.toc-item .label{flex:1}.toc-item .badge{font-size:9px;color:var(--muted);background:var(--surface2);padding:2px 6px;border-radius:4px}
+.mobile-nav{display:none}@media(max-width:820px){:root{--sidebar:0}body{font-size:13px}.sidebar{display:none}main{margin-left:0}.topbar{padding:0 16px;height:55px}.crumbs{font-size:10px}.search{display:none}.content{padding:24px 16px 80px}.section h2{font-size:20px}.section pre{font-size:10px;padding:12px}.section table{font-size:11px}.mobile-nav{position:fixed;display:flex;left:8px;right:8px;bottom:8px;height:50px;padding:4px;background:rgba(251,251,249,.92);border:1px solid var(--line);border-radius:11px;backdrop-filter:blur(18px);z-index:20;gap:2px}.mobile-nav a{flex:1;border:0;background:transparent;border-radius:7px;color:var(--muted);text-decoration:none;display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer}.mobile-nav a.active{background:var(--accent-soft);color:var(--text)}}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><div class="mark"></div><span class="brand-name">CHORA</span><span class="version">ENCYCLOPEDIA</span></div>
+  <div class="nav-label">Navigazione</div>
+  <nav class="nav" id="tocNav"></nav>
+  <div class="foot"><span class="status-dot"></span>Enciclopedia v3.0 · 1356 righe<br><span style="margin-left:14px">10 Sep 2026</span></div>
+</aside>
+
+<main>
+<header class="topbar">
+  <div class="crumbs"><span>CHORA</span><span>/</span><strong>Enciclopedia</strong></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a href="./" class="back-btn">← Torna a CHORA</a>
+    <label class="search"><span>⌕</span><input id="search" placeholder="Cerca..." autocomplete="off"></label>
+  </div>
+</header>
+
+<div class="content active" id="content">
+
+<div class="section" style="padding-top:10px">
+  <h1 style="font-size:clamp(28px,4vw,42px);font-weight:620;letter-spacing:-.05em;margin:0 0 6px">📚 Chora — Enciclopedia dei Comandi e del Funzionamento</h1>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:8px">Versione: 3.0 | Data: 2026-09-10</p>
+  <p style="max-width:700px;line-height:1.7">Documentazione completa del sistema Chora (Oracle Research Project). <br>Repository: <code>OracleResearch/</code></p>
+</div>
+
+<div class="section toc">
+  <h3>Indice — 20 sezioni</h3>
+  <div class="toc-grid" id="tocGrid"></div>
+</div>
+
+<div class="section" id="sec1">
+<h2><span class="num">01</span>Visione d'Insieme</h2>
+<p class="subtitle">Il sistema a colpo d'occhio</p>
+<p><strong>Chora</strong> è un sistema di <strong>intelligence documentale e grafo della conoscenza</strong> personale/familiare. Nasce come progetto di ricerca per:</p>
+<ol>
+<li><strong>Catalogare automaticamente</strong> file, foto, video, documenti da qualunque dispositivo di storage (hard disk esterni, NAS, cloud mount)</li>
+<li><strong>Costruire un grafo della conoscenza</strong> (knowledge graph) dove file, persone, luoghi, eventi sono nodi collegati da archi semantici</li>
+<li><strong>Riconoscere volti</strong> in foto (InsightFace / ArcFace) e clusterizzare persone simili</li>
+<li><strong>Scansionare testo con HSD</strong> (Highly Sensitive Data) per evitare che password, API key, dati sensibili finiscano nell'AI</li>
+<li><strong>Ricercare semanticamente</strong> per testo e immagini (ChromaDB + MiniLM + CLIP)</li>
+<li><strong>Interrogare il tutto con linguaggio naturale</strong> via Archimede e l'orchestratore Oracle</li>
+</ol>
+<h4>I quattro strati (layer)</h4>
+<pre>┌─────────────────────────────────────────────────┐
+│  Chora Core (:8100)  — Frontend Web + Agente    │
+├─────────────────────────────────────────────────┤
+│  Archimede (:8001) — Graph Data Engine           │
+├─────────────────────────────────────────────────┤
+│  Penelope (:5000) — Ingestion + Knowledge Graph │
+├─────────────────────────────────────────────────┤
+│  Egida — HSD Guardrail (across all layers)       │
+└─────────────────────────────────────────────────┘</pre>
+</div>
+
+<div class="section" id="sec2">
+<h2><span class="num">02</span>Architettura Generale</h2>
+<p class="subtitle">Directory structure, stack tecnologico</p>
+<h4>Struttura delle directory</h4>
+<pre>OracleResearch/
+├── run.py                    # Entry point unico
+├── CHORA_ENCYCLOPEDIA.md     # Documentazione sorgente
+├── penelope/                 # Layer 2 — Ingestion + Graph
+│   ├── penelope/cli.py, discovery.py, config/
+│   │   ├── db/ (mariadb_store, chroma_store, graph_bridge)
+│   │   └── ingestion/ (scanner, dispatcher, processor, metadata, image_embedder)
+│   ├── web/api.py            # Flask API (:5000)
+│   └── scripts/              # Migration e batch
+├── archimede/                # Layer 3 — Graph Data Engine
+│   └── archimede/api.py, graph/, identity/, presentation/
+├── oracle-rui/               # Layer 4 — Chora Core (:8100)
+│   ├── cli.py, mcp_server.py, tools/, api/
+├── egida/                    # Layer 1 — HSD Guardrail
+│   └── filters.py, ner_light.py, quarantine.py
+└── logs/</pre>
+<h4>Stack tecnologico</h4>
+<table>
+<tr><th>Componente</th><th>Tecnologia</th></tr>
+<tr><td>Database principale</td><td>MariaDB su Proxmox</td></tr>
+<tr><td>Embedding testuali</td><td>MiniLM (sentence-transformers, 384-dim)</td></tr>
+<tr><td>Embedding immagini</td><td>CLIP ViT-B/32 (open-clip-torch, 512-dim)</td></tr>
+<tr><td>Vector store</td><td>ChromaDB</td></tr>
+<tr><td>Face recognition</td><td>InsightFace (ArcFace 512-dim + RetinaFace)</td></tr>
+<tr><td>Scene detection</td><td>PySceneDetect (AdaptiveDetector)</td></tr>
+<tr><td>Graph in-memory</td><td>NetworkX (MultiDiGraph)</td></tr>
+<tr><td>Frontend web</td><td>Flask (Penelope) + FastAPI</td></tr>
+<tr><td>HSD scanning</td><td>Regex + SpaCy NER</td></tr>
+</table>
+</div>
+
+<div class="section" id="sec3">
+<h2><span class="num">03</span>Installazione e Setup</h2>
+<h4>Prerequisiti</h4>
+<ul>
+<li>Python 3.9+</li>
+<li>MariaDB server (remoto o Docker) oppure SQLite locale</li>
+<li>~2 GB RAM libera, ~1 GB disco per modelli</li>
+</ul>
+<h4>Setup rapido</h4>
+<pre>python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install sentence-transformers open-clip-torch
+pip install insightface onnxruntime
+pip install spacy && python -m spacy download it_core_news_sm</pre>
+<h4>Primo avvio</h4>
+<pre># Solo setup template .env
+python run.py --init
+
+# Setup + registra il primo storage + scan immediato
+python run.py --init /Volumes/HDD/Documenti</pre>
+</div>
+
+<div class="section" id="sec4">
+<h2><span class="num">04</span>Configurazione (.env)</h2>
+<pre># Penelope (penelope/.env)
+PENELOPE_DB_BACKEND=mariadb
+PENELOPE_DB_HOST=192.168.1.100
+PENELOPE_DB_PORT=3306
+PENELOPE_DB_USER=penelope
+PENELOPE_DB_NAME=penelope_rui
+PENELOPE_STORAGE_1=/Volumes/HDD/Documenti
+PENELOPE_LOG_LEVEL=INFO</pre>
+<p>Password risolta in ordine: Keyring → env → .env</p>
+<pre>penelope configure set</pre>
+</div>
+
+<div class="section" id="sec5">
+<h2><span class="num">05</span>Avvio del Sistema</h2>
+<pre>python run.py              # Chora Core (:8100)
+python run.py --with-penelope   # + Penelope (:5000)
+python run.py --with-archimede  # + Archimede (:8001)
+python run.py --all             # Tutti
+python run.py --status          # Solo status</pre>
+<h4>Server attivi</h4>
+<table>
+<tr><th>Porta</th><th>Servizio</th><th>URL</th></tr>
+<tr><td>8100</td><td>Chora Core / Oracle RUI</td><td>http://localhost:8100</td></tr>
+<tr><td>5000</td><td>Penelope (opzionale)</td><td>http://localhost:5000</td></tr>
+<tr><td>8001</td><td>Archimede (opzionale)</td><td>http://localhost:8001</td></tr>
+<tr><td>8101</td><td>MCP Server</td><td>Per Claude Code / Codex</td></tr>
+</table>
+</div>
+
+<div class="section" id="sec6">
+<h2><span class="num">06</span>Penelope — CLI Completa</h2>
+<p>Tutti i 31 comandi: <code>python -m penelope.cli &lt;comando&gt;</code></p>
+<h4>6.1 scan</h4>
+<pre>penelope scan /path --device laptop --project "Progetto"</pre>
+<h4>6.2 scan:all</h4>
+<pre>penelope scan:all</pre>
+<h4>6.3 queue process</h4>
+<pre>penelope queue process --batch 20 --reset-stale</pre>
+<h4>6.4 queue loop</h4>
+<pre>penelope queue loop --interval 5 --batch 5</pre>
+<h4>6.5 queue status</h4>
+<pre>penelope queue status</pre>
+<h4>6.6 watchdog start</h4>
+<pre>penelope watchdog start --path /path --device nome</pre>
+<h4>6.7 device register</h4>
+<pre>penelope device register --label z_drive --mount /Volumes/diskD --type network</pre>
+<h4>6.8 device list</h4>
+<pre>penelope device list</pre>
+<h4>6.9 device merge</h4>
+<pre>penelope device merge --keep 5 --remove 6 --yes</pre>
+<h4>6.10 search</h4>
+<pre>penelope search "angelo in montagna" --top 20</pre>
+<h4>6.11 graph status</h4>
+<pre>penelope graph status</pre>
+<h4>6.12 db dedup</h4>
+<pre>penelope db dedup</pre>
+<h4>6.13 db stats</h4>
+<pre>penelope db stats</pre>
+<h4>6.14 db verify</h4>
+<pre>penelope db verify --device z_drive --limit 100</pre>
+<h4>6.15 configure</h4>
+<pre>penelope configure set</pre>
+<h4>6.16 geo process</h4>
+<pre>penelope geo process</pre>
+<h4>6.17 geo test / 6.18 geo cache</h4>
+<pre>penelope geo test
+penelope geo cache</pre>
+<h4>6.19 event create-from-dates</h4>
+<pre>penelope event create-from-dates</pre>
+<h4>6.20-6.21 event status/list</h4>
+<pre>penelope event status
+penelope event list</pre>
+<h4>6.22 video detect-scenes</h4>
+<pre>penelope video detect-scenes</pre>
+<h4>6.23 video list</h4>
+<pre>penelope video list</pre>
+<h4>6.24-6.26 face test/process-all/reprocess</h4>
+<pre>penelope face test /path/foto.jpg
+penelope face process-all --limit 100
+penelope face reprocess</pre>
+<h4>6.27 face status</h4>
+<pre>penelope face status</pre>
+<h4>6.28 face cluster</h4>
+<pre>penelope face cluster --threshold 0.35 --merge</pre>
+<h4>6.29 face cluster-dbscan</h4>
+<pre>penelope face cluster-dbscan --eps 0.5 --min-samples 2 --merge</pre>
+<h4>6.30 quarantine list / 6.31 quarantine clear</h4>
+<pre>penelope quarantine list
+penelope quarantine clear</pre>
+</div>
+
+<div class="section" id="sec7">
+<h2><span class="num">07</span>Device Management</h2>
+<h4>Marker file (.penelope_device.json)</h4>
+<pre>{"device_id": 5, "label": "z_drive", "created_at": "2026-09-10T08:58:11"}</pre>
+<h4>Reconciliation ad ogni avvio</h4>
+<p><code>reconcile_devices()</code> enumera mountpoint via psutil, cerca marker, upserta mount.</p>
+<h4>Guard rail anti-duplicato</h4>
+<p>Quando marker assente, cmd_init() cerca in: device_mounts (host corrente) → device_mounts (qualunque host) → devices.mount_root.</p>
+<h4>Tabelle</h4>
+<pre>devices (id, label, type, volume_uuid, mount_root, last_seen_at)
+device_mounts (id, device_id, hostname, mount_root, last_seen_at)</pre>
+</div>
+
+<div class="section" id="sec8">
+<h2><span class="num">08</span>Ingestion Pipeline</h2>
+<h4>Flusso</h4>
+<pre>SCAN → MariaDB (File+Project) → QUEUE (ingestion_queue) → DISPATCH → Stage: EXIF, MiniLM, CLIP, NER, YOLO, InsightFace, DateEvents, Geocoding, SceneDetect</pre>
+<h4>Stage del Dispatcher</h4>
+<table>
+<tr><th>Stage</th><th>Cosa fa</th><th>Per</th></tr>
+<tr><td>EXIF</td><td>Data scatto, GPS, camera</td><td>Immagini</td></tr>
+<tr><td>Embedding testo</td><td>MiniLM → ChromaDB</td><td>File di testo</td></tr>
+<tr><td>Embedding immagini</td><td>CLIP → ChromaDB</td><td>Immagini</td></tr>
+<tr><td>NER</td><td>SpaCy → Person/Location + MENTIONS</td><td>Testo</td></tr>
+<tr><td>Face detection</td><td>YOLOv8n → bbox</td><td>Immagini</td></tr>
+<tr><td>Event da data</td><td>Event nodes da filename/EXIF</td><td>Tutti</td></tr>
+<tr><td>Geocoding</td><td>Nominatim → Location</td><td>Foto con GPS</td></tr>
+<tr><td>Scene detection</td><td>PySceneDetect → Event</td><td>Video</td></tr>
+</table>
+</div>
+
+<div class="section" id="sec9">
+<h2><span class="num">09</span>Modello del Grafo</h2>
+<table>
+<tr><th>Tipo</th><th>Creato da</th></tr>
+<tr><td>File</td><td>Scan, Watchdog</td></tr><tr><td>Project</td><td>Scan, Watchdog, --init</td></tr>
+<tr><td>Person</td><td>Face detection, NER, InsightFace</td></tr>
+<tr><td>Location</td><td>Geocoding</td></tr><tr><td>Event</td><td>Scene detection, Date parsing</td></tr>
+</table>
+<h4>Relazioni</h4>
+<table>
+<tr><th>Relazione</th><th>Source → Target</th></tr>
+<tr><td>MEMBER_OF</td><td>File → Project</td></tr><tr><td>MENTIONS</td><td>File → Person/Location</td></tr>
+<tr><td>CONTAINS</td><td>File → Person</td></tr><tr><td>CREATED_AT</td><td>File → Event</td></tr>
+<tr><td>HAS_SCENE</td><td>File → Event</td></tr><tr><td>LOCATED_AT</td><td>File → Location</td></tr>
+</table>
+</div>
+
+<div class="section" id="sec10">
+<h2><span class="num">10</span>Egida — Filtro HSD</h2>
+<table>
+<tr><th>Pattern</th><th>Severity</th><th>Score</th></tr>
+<tr><td>AWS Access Key (AKIA...)</td><td>CRITICAL</td><td>100</td></tr>
+<tr><td>GitHub Token (ghp_...)</td><td>CRITICAL</td><td>100</td></tr>
+<tr><td>Hugging Face Token (hf_...)</td><td>CRITICAL</td><td>100</td></tr>
+<tr><td>Chiave SSH privata</td><td>CRITICAL</td><td>100</td></tr>
+<tr><td>Codice Fiscale italiano</td><td>HIGH</td><td>90</td></tr>
+<tr><td>API Key / JWT / Password</td><td>HIGH</td><td>90</td></tr>
+<tr><td>Numero di telefono</td><td>MEDIUM</td><td>50</td></tr>
+<tr><td>Email</td><td>MEDIUM</td><td>50</td></tr>
+<tr><td>CAP</td><td>LOW</td><td>25</td></tr>
+</table>
+<p>Soglia quarantena: 50.</p>
+</div>
+
+<div class="section" id="sec11">
+<h2><span class="num">11</span>Face Recognition (InsightFace)</h2>
+<pre>RetinaFace (detection) + ArcFace 512-dim (embedding)
+CPU, modello buffalo_l ~30MB</pre>
+<h4>Comandi</h4>
+<pre>penelope face test /path/foto.jpg
+penelope face process-all
+penelope face reprocess
+penelope face cluster --threshold 0.4 --merge
+penelope face cluster-dbscan --eps 0.5 --min-samples 2 --merge</pre>
+<h4>Name Tag (Archimede)</h4>
+<pre>POST /archimede/name-tag
+{"person_id": "uuid...", "name_tag": "Angelo", "propagate": true}</pre>
+</div>
+
+<div class="section" id="sec12">
+<h2><span class="num">12</span>ChromaDB — Ricerca Semantica</h2>
+<table>
+<tr><th>Collezione</th><th>Dim</th><th>Modello</th></tr>
+<tr><td>file_embeddings</td><td>384-dim</td><td>MiniLM</td></tr>
+<tr><td>image_embeddings</td><td>512-dim</td><td>CLIP ViT-B/32</td></tr>
+</table>
+<pre>penelope search "angelo in montagna" --top 20</pre>
+</div>
+
+<div class="section" id="sec13">
+<h2><span class="num">13</span>Penelope Web API (:5000)</h2>
+<table>
+<tr><th>Endpoint</th><th>Metodo</th></tr>
+<tr><td>/</td><td>GET — Info</td></tr>
+<tr><td>/api/stats</td><td>GET — Statistiche</td></tr>
+<tr><td>/api/graph/nodes</td><td>GET — Nodi</td></tr>
+<tr><td>/api/graph/edges</td><td>GET — Archi</td></tr>
+<tr><td>/api/search?q=</td><td>GET — Ricerca semantica</td></tr>
+<tr><td>/api/health</td><td>GET — Health check</td></tr>
+</table>
+</div>
+
+<div class="section" id="sec14">
+<h2><span class="num">14</span>Archimede API (:8001)</h2>
+<table>
+<tr><th>Endpoint</th><th>Metodo</th></tr>
+<tr><td>/archimede/health</td><td>GET</td></tr>
+<tr><td>/archimede/stats</td><td>GET</td></tr>
+<tr><td>/archimede/search?q=&amp;top_k=</td><td>GET</td></tr>
+<tr><td>/archimede/persons</td><td>GET</td></tr>
+<tr><td>/archimede/photos</td><td>GET</td></tr>
+<tr><td>/archimede/events</td><td>GET</td></tr>
+<tr><td>/archimede/locations</td><td>GET</td></tr>
+<tr><td>/archimede/name-tags</td><td>GET</td></tr>
+<tr><td>/archimede/query</td><td>POST</td></tr>
+<tr><td>/archimede/chat</td><td>POST</td></tr>
+<tr><td>/archimede/find-parents</td><td>POST</td></tr>
+</table>
+</div>
+
+<div class="section" id="sec15">
+<h2><span class="num">15</span>Chora Core / Oracle RUI (:8100)</h2>
+<p>Backend FastAPI, frontend Chat UI, agente orchestratore + MCP Server (:8101).</p>
+<h4>Tools</h4>
+<table>
+<tr><th>Tool</th><th>Descrizione</th></tr>
+<tr><td>PenelopeBridge</td><td>Interroga grafo</td></tr>
+<tr><td>WebAccess</td><td>Naviga web</td></tr>
+<tr><td>WikiTool</td><td>Wikipedia</td></tr>
+<tr><td>GmailClient</td><td>Legge Gmail</td></tr>
+<tr><td>MCTSEngine</td><td>MCTS reasoning</td></tr>
+<tr><td>VectorMemory</td><td>Memoria a lungo termine</td></tr>
+</table>
+</div>
+
+<div class="section" id="sec16">
+<h2><span class="num">16</span>Schema del Database</h2>
+<pre>nodes (id VARCHAR(64) PK, type ENUM, label, metadata JSON, created_at, updated_at)
+edges (id INT AUTO_INCREMENT PK, source_id FK, target_id FK, relation VARCHAR(50), weight FLOAT, metadata JSON)
+file_registry (id INT AUTO_INCREMENT PK, node_id FK, device_id FK, device, path, size_bytes, sha256, mime_type, status ENUM)
+devices (id INT AUTO_INCREMENT PK, label UNIQUE, type ENUM, volume_uuid, mount_root, created_at, last_seen_at)
+device_mounts (id INT AUTO_INCREMENT PK, device_id FK, hostname, mount_root, UNIQUE(device_id,hostname))
+ingestion_queue (id INT AUTO_INCREMENT PK, node_id FK, status ENUM, priority INT, error_msg TEXT)</pre>
+</div>
+
+<div class="section" id="sec17">
+<h2><span class="num">17</span>Migration</h2>
+<p>In <code>penelope/scripts/</code>: migration_002_devices, migration_003_device_mounts, migration_004_normalize_windows_paths.</p>
+<pre>python scripts/migration_002_devices.py --report-only  # solo report
+python scripts/migration_002_devices.py --dry-run      # dry-run
+python scripts/migration_002_devices.py                # esecuzione</pre>
+</div>
+
+<div class="section" id="sec18">
+<h2><span class="num">18</span>Scripts Utili</h2>
+<ul>
+<li><code>batch_face_detection.py</code> — Batch immagini</li>
+<li><code>batch_image_embedding.py</code> — CLIP batch</li>
+<li><code>check_paths.py</code> — Verifica path</li>
+<li><code>clean_quarantine.py</code> — Pulisce quarantena</li>
+<li><code>explore_data.py</code> — Esplora DB</li>
+<li><code>find_parents_photos.py</code> — Foto genitori CLI</li>
+</ul>
+</div>
+
+<div class="section" id="sec19">
+<h2><span class="num">19</span>Flussi End-to-End</h2>
+<h4>A. Setup iniziale</h4>
+<pre>python run.py --init
+penelope configure set
+penelope device register --label z_drive --mount /Volumes/diskD --type network
+penelope scan /Volumes/diskD --device z_drive
+penelope queue process --batch 20
+python run.py --all</pre>
+<h4>B. Scan + queue + watchdog</h4>
+<pre>penelope scan /Volumes/HDD --device laptop
+penelope queue loop --interval 10 --batch 10
+penelope watchdog start --path /Volumes/HDD/Download --device laptop</pre>
+<h4>C. Face recognition</h4>
+<pre>penelope face process-all
+penelope face cluster-dbscan --eps 0.45 --merge</pre>
+<h4>D. Device merge</h4>
+<pre>penelope device list
+penelope device merge --keep 5 --remove 6 --yes
+cat /Volumes/diskD/.penelope_device.json</pre>
+<h4>E. Verifica</h4>
+<pre>penelope db verify --device z_drive
+penelope db stats
+penelope queue status</pre>
+</div>
+
+<div class="section" id="sec20">
+<h2><span class="num">20</span>Troubleshooting</h2>
+<table>
+<tr><th>Problema</th><th>Soluzione</th></tr>
+<tr><td>ModuleNotFoundError: penelope</td><td>Esegui da penelope/: python -m penelope.cli</td></tr>
+<tr><td>MariaDB connection failed</td><td>ping, penelope configure test, keyring</td></tr>
+<tr><td>Nessun device in list</td><td>Rifai device register o --init /path</td></tr>
+<tr><td>File offline dopo scan</td><td>df -h, rifai device register</td></tr>
+<tr><td>Coda bloccata in processing</td><td>penelope queue process --reset-stale --max-age 5</td></tr>
+<tr><td>ChromaDB vuota</td><td>penelope queue status, processa coda</td></tr>
+<tr><td>InsightFace models fail</td><td>penelope face test /path/img.jpg triggera download</td></tr>
+<tr><td>Watchdog non rileva</td><td>Permessi macOS / max_user_watches Linux</td></tr>
+</table>
+</div>
+
+<hr style="border:0;height:1px;background:var(--line);margin:50px 0">
+<p style="color:var(--muted);text-align:center;font-size:12px">Chora v3.0 — Built with 💚 by Toni · 2026-09-10</p>
+</div>
+
+<div class="mobile-nav">
+  <a href="#" onclick="scrollToSection('sec1');return false">Visione</a>
+  <a href="#" onclick="scrollToSection('sec6');return false">CLI</a>
+  <a href="#" onclick="scrollToSection('sec8');return false">Pipeline</a>
+  <a href="#" onclick="scrollToSection('sec16');return false">DB</a>
+  <a href="index.html">← Home</a>
+</div>
+
+<script>
+const sections = [
+  [1,"01 — Visione d'Insieme","sec1"],[2,"02 — Architettura","sec2"],
+  [3,"03 — Installazione","sec3"],[4,"04 — Configurazione (.env)","sec4"],
+  [5,"05 — Avvio del Sistema","sec5"],[6,"06 — CLI Completa","sec6"],
+  [7,"07 — Device Management","sec7"],[8,"08 — Ingestion Pipeline","sec8"],
+  [9,"09 — Modello del Grafo","sec9"],[10,"10 — Egida HSD","sec10"],
+  [11,"11 — Face Recognition","sec11"],[12,"12 — ChromaDB","sec12"],
+  [13,"13 — Penelope API","sec13"],[14,"14 — Archimede API","sec14"],
+  [15,"15 — Chora Core","sec15"],[16,"16 — Schema DB","sec16"],
+  [17,"17 — Migration","sec17"],[18,"18 — Scripts Utili","sec18"],
+  [19,"19 — Flussi E2E","sec19"],[20,"20 — Troubleshooting","sec20"]
+];
+const nav = document.getElementById('tocNav');
+nav.innerHTML = sections.map(s => `<a href="#${s[2]}" onclick="scrollToSection('${s[2]}');return false"><span class="ico">◉</span>${s[1]}</a>`).join('');
+const grid = document.getElementById('tocGrid');
+grid.innerHTML = sections.map(s => `<a class="toc-item" href="#${s[2]}" onclick="scrollToSection('${s[2]}');return false"><span class="num">${String(s[0]).padStart(2,'0')}</span><span class="label">${s[1].replace(/^\d+\s— /,'')}</span><span class="badge">sez.${s[0]}</span></a>`).join('');
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) { el.scrollIntoView({behavior:'smooth',block:'start'});
+    document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+    const link = document.querySelector(`.nav a[href="#${id}"]`);
+    if (link) link.classList.add('active'); }
+}
+document.getElementById('search').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.value.trim()) {
+    const q = e.target.value.trim().toLowerCase(); let count = 0;
+    document.querySelectorAll('.section').forEach(sec => { const ok = sec.textContent.toLowerCase().includes(q); sec.style.display = ok ? 'block' : 'none'; if(ok) count++; });
+    const t = document.createElement('div'); t.style.cssText = 'position:fixed;right:24px;bottom:80px;background:#171816;color:#fff;padding:10px 13px;border-radius:9px;font-size:11px;z-index:999';
+    t.textContent = count + ' risultati'; document.body.appendChild(t); setTimeout(() => t.remove(), 2500);
+  }
+});
+</script>
+</body>
+</html>

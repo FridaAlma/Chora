@@ -1436,13 +1436,16 @@ async def prometeo_health():
 # AgentOS registers its own GET / inside get_app(), which takes precedence.
 # We wrap the ASGI protocol so GET / and /ui are caught before FastAPI.
 from pathlib import Path as _Path
-_chora_index_path = _Path(__file__).resolve().parent.parent / "index.html"
+_chora_root = _Path(__file__).resolve().parent.parent
+_chora_index_path = _chora_root / "index.html"
+_chora_encyclopedia_path = _chora_root / "chora_encyclopedia.html"
 
 class _ChoraASGIWrapper:
-    """ASGI wrapper: serves index.html at GET /, /ico/* static files, delegates everything else."""
+    """ASGI wrapper: serves index.html, chora_encyclopedia.html, /ico/* static files,
+    delegates everything else."""
     def __init__(self, inner):
         self.inner = inner
-        self.ico_dir = _Path(__file__).resolve().parent.parent / "ico"
+        self.ico_dir = _chora_root / "ico"
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["method"] == "GET":
             path = scope.get("path", "").rstrip("/") or "/"
@@ -1460,6 +1463,13 @@ class _ChoraASGIWrapper:
                 idx = _chora_index_path
                 resp = FileResponse(str(idx)) if idx.exists() else \
                        JSONResponse({"error": "index.html not found"}, status_code=404)
+                await resp(scope, receive, send)
+                return
+            if path == "/chora_encyclopedia.html":
+                from fastapi.responses import FileResponse, JSONResponse
+                enc = _chora_encyclopedia_path
+                resp = FileResponse(str(enc)) if enc.exists() else \
+                       JSONResponse({"error": "chora_encyclopedia.html not found"}, status_code=404)
                 await resp(scope, receive, send)
                 return
         await self.inner(scope, receive, send)
