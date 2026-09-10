@@ -114,12 +114,22 @@ def _reconcile_and_scan() -> None:
     """Esegue device reconciliation e avvia scan automatici in background.
 
     Chiamata da start_penelope() prima di avviare il server Flask.
-    Non blocca l’avvio: eventuali errori sono loggati come warning.
+    Non blocca l'avvio: eventuali errori sono loggati come warning.
+
+    Per ogni device aggiornato:
+    1. Elenca le sottocartelle di primo livello, filtrando junk names.
+    2. Per ognuna, chiama detect_project_boundary() per trovare il vero
+       confine del progetto (scendendo eventuali wrapper a singolo figlio).
+    3. Scansiona solo dal confine calcolato.
     """
     try:
         from penelope.discovery import reconcile_devices
         from penelope.db.mariadb_store import MariaDBStore
         from penelope.ingestion.scanner import FileScanner
+        from penelope.ingestion.project_detection import (
+            is_junk_name,
+            detect_project_boundary,
+        )
 
         db = MariaDBStore()
         updated = reconcile_devices(db)
@@ -144,21 +154,14 @@ def _reconcile_and_scan() -> None:
                     from pathlib import Path
 
                     root = Path(mp)
-                    subdirs = [d for d in root.iterdir() if d.is_dir()]
 
-                    if subdirs:
-                        logger.info(
-                            "Auto-scan avviato: %s (%s) — %d sottocartelle",
-                            dev_label, mp, len(subdirs),
-                        )
-                        scanner = FileScanner(device_name=dev_label)
-                        for sd in subdirs:
-                            scanner.scan_directory(str(sd), project_label=sd.name)
-                        logger.info(
-                            "Auto-scan completato: %s — %d progetti processati",
-                            dev_label, len(subdirs),
-                        )
-                    else:
+                    # Filtra junk, enumera solo directory non-junk
+                    subdirs = [
+                        d for d in root.iterdir()
+                        if d.is_dir() and not is_junk_name(d.name)
+                    ]
+
+                    if not subdirs:
                         logger.info(
                             "Auto-scan avviato: %s (%s) — nessuna sottocartella, scan radice",
                             dev_label, mp,
@@ -166,6 +169,28 @@ def _reconcile_and_scan() -> None:
                         scanner = FileScanner(device_name=dev_label)
                         scanner.scan_directory(mp, project_label=dev_label)
                         logger.info("Auto-scan completato: %s", dev_label)
+                        return
+
+                    logger.info(
+                        "Auto-scan avviato: %s (%s) — %d sottocartelle",
+                        dev_label, mp, len(subdirs),
+                    )
+                    scanner = FileScanner(device_name=dev_label)
+                    for sd in subdirs:
+                        # Trova il vero confine del progetto
+                        project_root = detect_project_boundary(sd)
+                        logger.debug(
+                            "  %s -> limite progetto: %s (label=%s)",
+                            sd.name, project_root, project_root.name,
+                        )
+                        scanner.scan_directory(
+                            str(project_root),
+                            project_label=project_root.name,
+                        )
+                    logger.info(
+                        "Auto-scan completato: %s — %d progetti processati",
+                        dev_label, len(subdirs),
+                    )
                 except Exception as e:
                     logger.warning("Auto-scan fallito per %s (%s): %s", dev_label, mp, e)
 
