@@ -151,6 +151,13 @@
   .loading { text-align: center; padding: 40px; color: var(--text2); }
   .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .download-btn { transition: opacity .15s; }
+  .download-btn:hover { opacity: .85; }
+  .preview-img { max-width:100%; max-height:400px; border-radius:8px; cursor:zoom-in; transition:transform .2s; }
+  .preview-img:hover { transform:scale(1.02); }
+  .preview-video { max-width:100%; max-height:400px; border-radius:8px; background:#000; }
+  .preview-audio { width:100%; }
+  .preview-text { background:var(--surface2); padding:12px; border-radius:6px; font-size:12px; max-height:300px; overflow:auto; white-space:pre-wrap; font-family:monospace; }
   @media (max-width: 768px) {
     .content { padding: 12px; }
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -162,6 +169,11 @@
 <div class="header">
   <h1><span>PENELOPE</span> &middot; Grafo della Conoscenza</h1>
   <div class="subtitle">Oracle &mdash; Ingestion &amp; Grafo</div>
+  <div style="flex:1;max-width:400px;margin:0 16px">
+    <input type="text" id="headerSearch" placeholder="Cerca file, persone, luoghi... (Ctrl+F)" 
+           style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-size:13px"
+           onkeydown="if(event.key==='Enter')quickSearch()" onfocus="this.select()">
+  </div>
   <div class="live"><span class="dot"></span> Live</div>
 </div>
 <div class="nav" id="nav">
@@ -192,7 +204,7 @@
   <div class="node-filters">
     <select id="nodeTypeFilter"><option value="">Tutti i tipi</option><option value="File">File</option><option value="Person">Persona</option><option value="Location">Luogo</option><option value="Project">Progetto</option></select>
     <input type="text" id="nodeSearch" placeholder="Cerca per nome o ID...">
-    <button onclick="loadNodes(0)">Cerca</button>
+    <button onclick="loadNodesPage(0)">Cerca</button>
   </div>
   <div id="nodeTableContainer"></div>
   <div class="pagination" id="nodePagination"></div>
@@ -237,7 +249,7 @@ document.querySelectorAll('.nav button').forEach(btn => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'graph') loadGraph();
-    if (btn.dataset.tab === 'nodes') loadNodes(0);
+    if (btn.dataset.tab === 'nodes') loadNodesPage(0);
     if (btn.dataset.tab === 'faces') loadFaces();
     if (btn.dataset.tab === 'projects') loadProjects();
   });
@@ -315,7 +327,7 @@ function fitGraph() { if (graphNetwork) graphNetwork.fit(); }
 
 // ─── NODI ─────────────────────────────────
 let currentNodeOffset = 0;
-async function loadNodes(offset) {
+async function loadNodesPage(offset) {
   currentNodeOffset = offset;
   const type = document.getElementById('nodeTypeFilter').value;
   const search = document.getElementById('nodeSearch').value;
@@ -339,11 +351,11 @@ async function loadNodes(offset) {
     container.innerHTML = html;
     const totalPages = Math.ceil(data.total/100);
     const currPage = Math.floor(offset/100)+1;
-    let pg = `<button onclick="loadNodes(0)" ${offset===0?'disabled':''}>&laquo;</button>
-              <button onclick="loadNodes(${Math.max(0,offset-100)})" ${offset===0?'disabled':''}>&lsaquo;</button>
+    let pg = `<button onclick="loadNodesPage(0)" ${offset===0?'disabled':''}>&laquo;</button>
+              <button onclick="loadNodesPage(${Math.max(0,offset-100)})" ${offset===0?'disabled':''}>&lsaquo;</button>
               <span class="info">Pagina ${currPage} di ${totalPages} (${data.total} nodi)</span>
-              <button onclick="loadNodes(${offset+100})" ${offset+100>=data.total?'disabled':''}>&rsaquo;</button>
-              <button onclick="loadNodes(${Math.max(0,totalPages-1)*100})" ${offset+100>=data.total?'disabled':''}>&raquo;</button>`;
+              <button onclick="loadNodesPage(${offset+100})" ${offset+100>=data.total?'disabled':''}>&rsaquo;</button>
+              <button onclick="loadNodesPage(${Math.max(0,totalPages-1)*100})" ${offset+100>=data.total?'disabled':''}>&raquo;</button>`;
     document.getElementById('nodePagination').innerHTML = pg;
   } catch(e) { container.innerHTML = `<div class="loading">Errore: ${e.message}</div>`; }
 }
@@ -382,29 +394,35 @@ async function doSearch() {
   container.innerHTML = '<div class="loading"><div class="spinner"></div>Cercando...</div>';
   try {
     const data = await api('/api/search?q='+encodeURIComponent(q)+'&top=30');
-    if (data.results.length===0) { container.innerHTML = '<p style="color:var(--text2);padding:20px">Nessun risultato.</p>'; return; }
-    let html = '';
+    if (data.results.length===0) {
+      container.innerHTML = '<p style="color:var(--text2);padding:20px">Nessun risultato per "' + escapeHtml(q) + '".</p><p style="color:var(--text2);padding:0 20px;font-size:12px">Suggerimenti: prova con nomi di file, cartelle, o contenuti. I file vanno prima elaborati con <code style="background:var(--surface2);padding:2px 6px;border-radius:3px">penelope queue loop</code> per la ricerca semantica.</p>';
+      return;
+    }
+    let html = `<p style="color:var(--text2);font-size:12px;margin-bottom:8px">${data.results.length} risultati per "<b>${escapeHtml(q)}</b>"</p>`;
     data.results.forEach(r => {
       const isImage = r.mime_type && r.mime_type.startsWith('image/');
       const fileLabel = escapeHtml(r.file_name || (r.node_id ? r.node_id.slice(0,16) : '?'));
-      html += `<div class="search-item">
+      const similarity = r.distance !== undefined ? Math.max(0, Math.min(1, 1 - r.distance)).toFixed(3) : '?';
+      html += `<div class="search-item" onclick="openDetail('${r.node_id}')" style="cursor:pointer">
         <div style="display:flex;align-items:center;gap:12px;flex:1">
-          ${isImage && r.file_path ? `<div style="flex-shrink:0;width:80px;height:60px;border-radius:4px;overflow:hidden;background:var(--surface2);display:flex;align-items:center;justify-content:center;">
-            <img src="/api/images/${r.node_id}" style="max-width:100%;max-height:100%;object-fit:cover" loading="lazy" onerror="this.parentElement.textContent='📷'">
-          </div>` : ''}
+          ${isImage && r.file_path ? `<div style="flex-shrink:0;width:80px;height:60px;border-radius:4px;overflow:hidden;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:24px">
+            <img src="/api/files/${r.node_id}/preview" style="max-width:100%;max-height:100%;object-fit:cover" loading="lazy" onerror="this.parentElement.textContent='🖼'">
+          </div>` : '<div style="flex-shrink:0;width:80px;height:60px;border-radius:4px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:24px">📄</div>'}
           <div style="flex:1;min-width:0">
             <div class="file-name" style="font-size:13px">${fileLabel}</div>
-            <div class="file-type">${escapeHtml(r.mime_type||'')}</div>
+            <div class="file-type">${escapeHtml(r.mime_type||'')}${r.search_type === 'fallback_label' ? ' &middot; <span style="color:var(--orange)">ricerca testo base</span>' : ''}</div>
             ${r.snippet ? `<div class="snippet">${escapeHtml(r.snippet.slice(0,200))}</div>` : ''}
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:12px">
-          <div class="distance">${(1-(r.distance||0)).toFixed(3)}</div>
+          <div class="distance">${similarity}</div>
         </div>
       </div>`;
     });
     container.innerHTML = html;
-  } catch(e) { container.innerHTML = `<div class="loading">Errore: ${e.message}</div>`; }
+  } catch(e) {
+    container.innerHTML = `<div class="loading">Errore: ${escapeHtml(e.message)}</div>`;
+  }
 }
 
 // ─── PROJECTS ─────────────────────────────
@@ -441,15 +459,89 @@ async function openDetail(nodeId) {
     const file = n.file||{};
     let html = `<h2>${escapeHtml(n.label||n.id.slice(0,16))} <span class="type-badge type-${n.type}">${n.type}</span></h2>
       <div class="subtitle">ID: ${n.id}</div>`;
+
+    // ─── Preview & Download (per File nodes) ─────────────
+    if (n.type === 'File' && file.path) {
+      html += '<div class="section"><h3>Anteprima</h3>';
+      const mime = (file.mime_type || meta.mime_type || '').toLowerCase();
+      const isImage = mime.startsWith('image/') && mime !== 'image/svg+xml';
+      const isVideo = mime.startsWith('video/');
+      const isAudio = mime.startsWith('audio/');
+      const isText = mime.startsWith('text/') || mime === 'application/json' || mime === 'application/xml';
+
+      if (isImage) {
+        html += `<div style="text-align:center;margin-bottom:12px">
+          <img src="/api/files/${nodeId}/preview" style="max-width:100%;max-height:400px;border-radius:8px;cursor:zoom-in" 
+               onclick="window.open('/api/files/${nodeId}/preview','_blank')" loading="lazy">
+        </div>`;
+      } else if (isVideo) {
+        html += `<div style="text-align:center;margin-bottom:12px">
+          <video controls style="max-width:100%;max-height:400px;border-radius:8px;background:#000">
+            <source src="/api/files/${nodeId}/preview" type="${escapeHtml(mime)}">
+          </video>
+        </div>`;
+      } else if (isAudio) {
+        html += `<div style="text-align:center;margin-bottom:12px">
+          <audio controls style="width:100%">
+            <source src="/api/files/${nodeId}/preview" type="${escapeHtml(mime)}">
+          </audio>
+        </div>`;
+      } else if (isText) {
+        // For text files, try to fetch and show snippet
+        html += `<div style="margin-bottom:12px;position:relative">
+          <pre id="textPreview" style="background:var(--surface2);padding:12px;border-radius:6px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap">Caricamento...</pre>
+        </div>`;
+      } else {
+        html += `<div style="text-align:center;margin-bottom:12px;padding:20px;background:var(--surface2);border-radius:8px;font-size:40px">📄</div>`;
+      }
+
+      // Download button
+      html += `<div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="/api/files/${nodeId}/download" class="download-btn" target="_blank" 
+           style="display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#000;padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px">
+          ⬇ Scarica File
+        </a>
+        <a href="/api/files/${nodeId}/preview" target="_blank" 
+           style="display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:6px;text-decoration:none;font-weight:500;font-size:13px">
+          ↩ Apri in scheda
+        </a>
+      </div></div>`;
+
+      // Load text content asynchronously
+      if (isText) {
+        fetch(`/api/files/${nodeId}/preview`)
+          .then(r => r.text())
+          .then(txt => {
+            const el = document.getElementById('textPreview');
+            if (el) el.textContent = txt.slice(0, 5000);
+          })
+          .catch(() => {
+            const el = document.getElementById('textPreview');
+            if (el) el.textContent = '(anteprima non disponibile)';
+          });
+      }
+    }
+
     // Metadati nodo
     html += '<div class="section"><h3>Metadati</h3><div class="meta-grid">';
-    if (file.path) { html += `<span class="key">Percorso</span><span class="val">${escapeHtml(file.path)}</span>`; }
-    if (file.device) { html += `<span class="key">Dispositivo</span><span class="val">${escapeHtml(file.device)}</span>`; }
-    if (file.mime_type) { html += `<span class="key">MIME</span><span class="val">${escapeHtml(file.mime_type)}</span>`; }
-    if (file.size_bytes) { html += `<span class="key">Dimensione</span><span class="val">${(file.size_bytes/1024).toFixed(1)} KB</span>`; }
-    if (file.sha256) { html += `<span class="key">SHA-256</span><span class="val" style="font-size:10px">${file.sha256}</span>`; }
-    html += `<span class="key">Creato</span><span class="val">${n.created_at||'?'}</span>`;
-    if (n.updated_at) html += `<span class="key">Aggiornato</span><span class="val">${n.updated_at}</span>`;
+    if (n.type === 'File') {
+      // Use info endpoint for richer file info
+      fetch(`/api/files/${nodeId}/info`)
+        .then(r => r.json())
+        .then(info => {
+          const el = document.getElementById('fileSize');
+          if (el && info.size_bytes) el.textContent = (info.size_bytes / 1024).toFixed(1) + ' KB';
+          if (info.size_bytes > 1048576) el.textContent = (info.size_bytes / 1048576).toFixed(1) + ' MB';
+        })
+        .catch(() => {});
+    }
+    if (file.path) { html += '<span class="key">Percorso</span><span class="val" style="font-size:11px">' + escapeHtml(file.path) + '</span>'; }
+    if (file.device) { html += '<span class="key">Dispositivo</span><span class="val">' + escapeHtml(file.device) + '</span>'; }
+    if (file.mime_type) { html += '<span class="key">MIME</span><span class="val">' + escapeHtml(file.mime_type) + '</span>'; }
+    if (file.size_bytes) { html += '<span class="key">Dimensione</span><span class="val" id="fileSize">' + (file.size_bytes/1024).toFixed(1) + ' KB</span>'; }
+    if (file.sha256) { html += '<span class="key">SHA-256</span><span class="val" style="font-size:10px">' + file.sha256 + '</span>'; }
+    html += '<span class="key">Creato</span><span class="val">' + (n.created_at||'?') + '</span>';
+    if (n.updated_at) html += '<span class="key">Aggiornato</span><span class="val">' + n.updated_at + '</span>';
     html += '</div></div>';
     // Face
     if (n.type==='Person') {
@@ -506,11 +598,47 @@ function loadNodes(offset, setType, setSearch) {
   document.querySelector('[data-tab="nodes"]').classList.add('active');
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-nodes').classList.add('active');
-  loadNodes(offset);
+  loadNodesPage(offset);
 }
+
+// ─── Quick search from header ────────────────────
+function quickSearch() {
+  const q = document.getElementById('headerSearch').value.trim();
+  if (!q) return;
+  // Switch to search tab
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.querySelector('[data-tab="search"]').classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-search').classList.add('active');
+  document.getElementById('searchQuery').value = q;
+  doSearch();
+}
+
+// Keyboard shortcut: Ctrl+F / Cmd+F → focus header search
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    document.getElementById('headerSearch').focus();
+  }
+  // Escape from any overlay
+  if (e.key === 'Escape') {
+    closeDetail();
+  }
+});
+
+// Also focus header on / key (like in many search UIs)
+document.addEventListener('keydown', function(e) {
+  if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+    e.preventDefault();
+    document.getElementById('headerSearch').focus();
+  }
+});
 
 // ─── INIT ─────────────────────────────────
 loadDashboard();
+
+// Focus header search on page load with Ctrl+F hint
+document.getElementById('headerSearch').placeholder = 'Cerca file, persone, luoghi... (Ctrl+F)';
 </script>
 </body>
 </html>

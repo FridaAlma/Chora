@@ -51,12 +51,29 @@ def _resolve_path(raw_path: str, mount_root: Optional[str] = None) -> str:
 _tls = threading.local()
 
 
+# ─── Cursore normalizzato (MariaDB DictCursor su Linux = uppercase) ───
+
+class _NormalizedCursor:
+    """Wrapper di cursore che normalizza le chiavi dei risultati in lowercase."""
+    def __init__(self, cursor):
+        self._cur = cursor
+    def execute(self, sql, params=None):
+        return self._cur.execute(sql, params)
+    def fetchone(self):
+        row = self._cur.fetchone()
+        return _nk(row) if row else None
+    def fetchall(self):
+        return [_nk(r) for r in self._cur.fetchall()]
+    def __getattr__(self, name):
+        return getattr(self._cur, name)
+
+
 def _get_cursor():
-    """Restituisce un cursore MariaDB dedicato al thread corrente."""
+    """Restituisce un cursore MariaDB con risultati normalizzati (chiavi lowercase)."""
     if not hasattr(_tls, 'conn'):
         _tls.conn = MariaDBStore()
         _tls.conn.connect()
-    return _tls.conn._conn.cursor()
+    return _NormalizedCursor(_tls.conn._conn.cursor())
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
@@ -66,6 +83,13 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)
 
 # ─── Database connection (creata una volta e riusata) ──────────────
+
+# Helper: normalizza chiavi dict (MariaDB DictCursor su Linux = uppercase)
+def _nk(d):
+    if d is None:
+        return {}
+    return {k.lower(): v for k, v in d.items()}
+
 
 _db = MariaDBStore()
 bridge = GraphBridge(_db)
@@ -108,31 +132,31 @@ def api_stats():
     cur = _get_cursor()
     try:
             cur.execute("SELECT type, COUNT(*) as cnt FROM nodes GROUP BY type ORDER BY cnt DESC")
-            nodes_by_type = {r["type"]: r["cnt"] for r in cur.fetchall()}
+            nodes_by_type = {r["type"]: r["cnt"] for r in [_nk(r) for r in cur.fetchall()]}
 
             cur.execute("SELECT relation, COUNT(*) as cnt FROM edges GROUP BY relation ORDER BY cnt DESC")
-            edges_by_rel = {r["relation"]: r["cnt"] for r in cur.fetchall()}
+            edges_by_rel = {r["relation"]: r["cnt"] for r in [_nk(r) for r in cur.fetchall()]}
 
             cur.execute("SELECT COUNT(*) AS cnt FROM nodes")
-            total_nodes = cur.fetchone()["cnt"]
+            total_nodes = _nk(cur.fetchone())["cnt"]
 
             cur.execute("SELECT COUNT(*) AS cnt FROM edges")
-            total_edges = cur.fetchone()["cnt"]
+            total_edges = _nk(cur.fetchone())["cnt"]
 
             cur.execute("SELECT COUNT(*) AS cnt FROM file_registry")
-            total_files = cur.fetchone()["cnt"]
+            total_files = _nk(cur.fetchone())["cnt"]
 
             cur.execute("SELECT COUNT(*) AS cnt FROM ingestion_queue WHERE status='done'")
-            queue_done = cur.fetchone()["cnt"]
+            queue_done = _nk(cur.fetchone())["cnt"]
 
             cur.execute("SELECT COUNT(*) AS cnt FROM nodes WHERE type='File' AND metadata LIKE '%has_faces%'")
-            with_faces = cur.fetchone()["cnt"]
+            with_faces = _nk(cur.fetchone())["cnt"]
 
             cur.execute("SELECT COUNT(*) AS cnt FROM nodes WHERE type='Person' AND metadata LIKE '%embedding_dim%'")
-            with_embeddings = cur.fetchone()["cnt"]
+            with_embeddings = _nk(cur.fetchone())["cnt"]
 
             cur.execute("SELECT COUNT(*) AS cnt FROM nodes WHERE type='File' AND metadata LIKE '%insightface%'")
-            insightface = cur.fetchone()["cnt"]
+            insightface = _nk(cur.fetchone())["cnt"]
 
             # Categoria
             cur.execute("""
@@ -142,18 +166,18 @@ def api_stats():
                 GROUP BY category
                 ORDER BY cnt DESC
             """)
-            by_category = {r["category"]: r["cnt"] for r in cur.fetchall()}
+            by_category = {_nk(r)["category"]: _nk(r)["cnt"] for r in cur.fetchall()}
 
             # Directory count
             cur.execute("SELECT COUNT(*) AS cnt FROM nodes WHERE type='Directory'")
-            directory_count = cur.fetchone()["cnt"]
+            directory_count = _nk(cur.fetchone())["cnt"]
 
             # Oggetti YOLO
             cur.execute("SELECT COUNT(*) AS cnt FROM objects")
-            object_count = cur.fetchone()["cnt"]
+            object_count = _nk(cur.fetchone())["cnt"]
 
             cur.execute("SELECT COUNT(*) AS cnt FROM node_objects")
-            node_object_links = cur.fetchone()["cnt"]
+            node_object_links = _nk(cur.fetchone())["cnt"]
 
     except Exception as e:
         logger.error("Errore stats: %s", e)
@@ -223,7 +247,7 @@ def api_nodes():
         rows = cur.fetchall()
 
         nodes = []
-        for r in rows:
+        for r in [_nk(row) for row in rows]:
             meta = r.get("metadata") or {}
             if isinstance(meta, str):
                 try:
@@ -231,10 +255,10 @@ def api_nodes():
                 except (json.JSONDecodeError, TypeError):
                     meta = {}
             node = {
-                "id": r["id"],
-                "type": r["type"],
-                "label": r["label"],
-                "created_at": str(r["created_at"]) if r.get("created_at") else None,
+                "id": r.get("id", ""),
+                "type": r.get("type", ""),
+                "label": r.get("label", ""),
+                "created_at": str(r.get("created_at", "")) if r.get("created_at") else None,
                 "path": _resolve_path(r.get("path", ""), r.get("mount_root")),
                 "mime_type": r.get("mime_type") or "",
                 "device": r.get("device") or "",
@@ -271,12 +295,18 @@ def api_node_detail(node_id):
             except (json.JSONDecodeError, TypeError):
                 meta = {}
 
+        # Normalize keys: MariaDB DictCursor restituisce MAIUSCOLE su Linux
+        def _nk(d):
+            return {k.lower(): v for k, v in (d or {}).items()}
+
+        row = _nk(row)
+
         node = {
-            "id": row["id"],
-            "type": row["TYPE"],
-            "label": row["label"],
-            "created_at": str(row["created_at"]) if row.get("created_at") else None,
-            "updated_at": str(row["updated_at"]) if row.get("updated_at") else None,
+            "id": row.get("id", ""),
+            "type": row.get("type", ""),
+            "label": row.get("label", ""),
+            "created_at": str(row.get("created_at", "")) if row.get("created_at") else None,
+            "updated_at": str(row.get("updated_at", "")) if row.get("updated_at") else None,
             "metadata": meta,
         }
 
@@ -289,6 +319,7 @@ def api_node_detail(node_id):
         """, (node_id,))
         fr = cur.fetchone()
         if fr:
+            fr = _nk(fr)
             # Risolve path assoluto
             raw_path = fr.get("path", "")
             mount_root = fr.get("mount_root")
@@ -315,13 +346,14 @@ def api_node_detail(node_id):
         """, (node_id,))
         incoming = []
         for r in cur.fetchall():
+            r = _nk(r)
             incoming.append({
-                "edge_id": r["id"],
-                "source_id": r["source_id"],
+                "edge_id": r.get("id", 0),
+                "source_id": r.get("source_id", ""),
                 "source_label": r.get("src_label", ""),
                 "source_type": r.get("src_type", ""),
-                "relation": r["relation"],
-                "weight": r["weight"],
+                "relation": r.get("relation", ""),
+                "weight": r.get("weight", 1.0),
             })
 
         # Archi uscenti
@@ -334,13 +366,14 @@ def api_node_detail(node_id):
         """, (node_id,))
         outgoing = []
         for r in cur.fetchall():
+            r = _nk(r)
             outgoing.append({
-                "edge_id": r["id"],
-                "target_id": r["target_id"],
+                "edge_id": r.get("id", 0),
+                "target_id": r.get("target_id", ""),
                 "target_label": r.get("tgt_label", ""),
                 "target_type": r.get("tgt_type", ""),
-                "relation": r["relation"],
-                "weight": r["weight"],
+                "relation": r.get("relation", ""),
+                "weight": r.get("weight", 1.0),
             })
 
         # Embedding (se persona con embedding)
@@ -548,7 +581,7 @@ def api_search():
                 try:
                     cur = _get_cursor()
                     cur.execute(
-                        """SELECT f.path, d.mount_root
+                        """SELECT f.path, d.mount_root, f.mime_type
                            FROM file_registry f
                            LEFT JOIN devices d ON d.id = f.device_id
                            WHERE f.node_id = %s""",
@@ -564,6 +597,31 @@ def api_search():
                 except Exception:
                     r["file_path"] = ""
                     r["extension"] = ""
+
+        # ─── FALLBACK: se ChromaDB vuoto, cerca per label LIKE ───
+        if not results:
+            with MariaDBStore() as fallback_db:
+                fallback_rows = fallback_db._query(
+                    """SELECT n.id, n.label, f.path, f.mime_type
+                       FROM nodes n
+                       LEFT JOIN file_registry f ON f.node_id = n.id
+                       WHERE n.type = 'File'
+                         AND (n.label LIKE %s OR n.id LIKE %s)
+                       ORDER BY n.created_at DESC
+                       LIMIT %s""",
+                    (f"%{query}%", f"%{query}%", top_k),
+                )
+                for row in fallback_rows:
+                    results.append({
+                        "node_id": row["id"],
+                        "file_name": row["label"],
+                        "mime_type": row.get("mime_type", ""),
+                        "distance": 0.0,
+                        "snippet": "",
+                        "file_path": "",
+                        "extension": Path(row.get("label", "")).suffix.lower(),
+                        "search_type": "fallback_label",
+                    })
 
         return jsonify({"results": results, "query": query})
     except Exception as e:
@@ -601,17 +659,19 @@ def api_objects():
                 LIMIT %s OFFSET %s""",
             tuple(params) + (limit, offset),
         )
-        objects = [{
-            "id": r["id"],
-            "label": r["label"],
-            "coco_class_id": r["coco_class_id"],
-            "category": r["category"],
-            "file_count": r["file_count"],
-            "avg_confidence": r["avg_confidence"],
-        } for r in cur.fetchall()]
+        objects = []
+        for r in [_nk(row) for row in cur.fetchall()]:
+            objects.append({
+                "id": r.get("id"),
+                "label": r.get("label"),
+                "coco_class_id": r.get("coco_class_id"),
+                "category": r.get("category"),
+                "file_count": r.get("file_count"),
+                "avg_confidence": r.get("avg_confidence"),
+            })
 
         cur.execute(f"SELECT COUNT(*) AS cnt FROM objects o {where}", tuple(params))
-        total = cur.fetchone()["cnt"]
+        total = _nk(cur.fetchone())["cnt"]
 
         return jsonify({"objects": objects, "total": total})
 
@@ -642,7 +702,7 @@ def api_faces():
             ORDER BY n.created_at DESC
             LIMIT %s OFFSET %s
         """, (limit, offset))
-        rows = cur.fetchall()
+        rows = [_nk(r) for r in cur.fetchall()]
 
         faces = []
         for r in rows:
@@ -653,8 +713,8 @@ def api_faces():
                 except (json.JSONDecodeError, TypeError):
                     meta = {}
             face = {
-                "id": r["id"],
-                "label": r["label"],
+                "id": r.get("id", ""),
+                "label": r.get("label", ""),
                 "file_path": r.get("file_path") or "",
                 "has_embedding": "embedding_dim" in str(meta),
                 "bbox": meta.get("bbox") or meta.get("rectangle"),
@@ -668,7 +728,7 @@ def api_faces():
 
         # Totale
         cur.execute("SELECT COUNT(*) AS cnt FROM nodes WHERE type = 'Person'")
-        total = cur.fetchone()["cnt"]
+        total = _nk(cur.fetchone())["cnt"]
 
         return jsonify({"faces": faces, "total": total, "limit": limit, "offset": offset})
 
@@ -692,7 +752,7 @@ def api_projects():
             WHERE n.type = 'Project'
             ORDER BY n.label
         """)
-        rows = cur.fetchall()
+        rows = [_nk(r) for r in cur.fetchall()]
         projects = []
         for r in rows:
             meta = r.get("metadata") or {}
@@ -702,14 +762,14 @@ def api_projects():
                 except:
                     meta = {}
             projects.append({
-                "id": r["id"],
-                "label": r["label"],
-                "file_count": r["child_count"] + r["member_count"],
-                "directory_count": r["child_count"],
-                "member_count": r["member_count"],
+                "id": r.get("id", ""),
+                "label": r.get("label", ""),
+                "file_count": (r.get("child_count") or 0) + (r.get("member_count") or 0),
+                "directory_count": r.get("child_count") or 0,
+                "member_count": r.get("member_count") or 0,
                 "path": meta.get("path", ""),
                 "device": meta.get("device", ""),
-                "created_at": str(r["created_at"]) if r.get("created_at") else None,
+                "created_at": str(r.get("created_at", "")) if r.get("created_at") else None,
             })
         return jsonify({"projects": projects})
 
