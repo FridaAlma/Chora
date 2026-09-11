@@ -62,12 +62,27 @@ class MariaDBStore:
         label: Optional[str] = None,
         metadata: Optional[dict] = None,
         node_id: Optional[str] = None,
+        category: Optional[str] = None,
+        parent_id: Optional[str] = None,
     ) -> str:
-        """Crea un nodo e restituisce il suo ID."""
+        """Crea un nodo e restituisce il suo ID.
+
+        Args:
+            node_type: 'File', 'Directory', 'Project', 'Person', 'Location', 'Event', 'Object'
+            label: Nome leggibile
+            metadata: Dict attributi
+            node_id: UUID (se omesso, generato)
+            category: 'image'|'video'|'document'|'other' (per File)
+            parent_id: ID del nodo genitore (per gerarchia Directory/File)
+        """
         node_id = node_id or str(uuid4())
-        sql = """INSERT INTO nodes (id, type, label, metadata)
-                 VALUES (%s, %s, %s, %s)"""
-        self._execute(sql, (node_id, node_type, label, json.dumps(metadata) if metadata else None))
+        sql = """INSERT INTO nodes (id, type, label, category, parent_id, metadata)
+                 VALUES (%s, %s, %s, %s, %s, %s)"""
+        self._execute(
+            sql,
+            (node_id, node_type, label, category, parent_id,
+             json.dumps(metadata) if metadata else None),
+        )
         return node_id
 
     def get_node(self, node_id: str) -> Optional[dict]:
@@ -89,6 +104,83 @@ class MariaDBStore:
         vals = list(fields.values()) + [node_id]
         sql = f"UPDATE nodes SET {sets} WHERE id = %s"
         return self._execute(sql, tuple(vals)) > 0
+
+    def get_node_by_path(self, path: str) -> Optional[dict]:
+        """Cerca un nodo File o Directory per path (nel metadata)."""
+        rows = self._query(
+            "SELECT * FROM nodes WHERE metadata LIKE %s LIMIT 1",
+            (f"%\"path\": \"{path}\"%",),
+        )
+        return rows[0] if rows else None
+
+    def get_child_nodes(self, parent_id: str) -> list[dict]:
+        """Restituisce i nodi figli diretti (gerarchia filesystem)."""
+        return self._query(
+            "SELECT * FROM nodes WHERE parent_id = %s ORDER BY type, label",
+            (parent_id,),
+        )
+
+    # ─── OGGETTI YOLO (tabella objects + node_objects) ───────────
+
+    def ensure_object(self, label: str, coco_class_id: Optional[int] = None) -> int:
+        """Trova o crea un oggetto (es. 'person', 'car') e ne restituisce l'ID."""
+        rows = self._query("SELECT id FROM objects WHERE label = %s LIMIT 1", (label,))
+        if rows:
+            return rows[0]["id"]
+        category = None
+        if coco_class_id is not None:
+            from penelope.ingestion.yolo_coco import COCO_CATEGORY
+            category = COCO_CATEGORY.get(coco_class_id)
+        self._execute(
+            "INSERT INTO objects (label, coco_class_id, category) VALUES (%s, %s, %s)",
+            (label, coco_class_id, category),
+        )
+        return int(self._conn.insert_id())
+
+    def link_object(
+        self,
+        node_id: str,
+        object_id: int,
+        confidence: float = 0.5,
+        bbox: Optional[list] = None,
+    ) -> bool:
+        """Collega un nodo File a un oggetto (molti-a-molti)."""
+        import json as _json
+        existing = self._query(
+            "SELECT id FROM node_objects WHERE node_id = %s AND object_id = %s LIMIT 1",
+            (node_id, object_id),
+        )
+        if existing:
+            return False
+        self._execute(
+            "INSERT INTO node_objects (node_id, object_id, confidence, bbox) VALUES (%s, %s, %s, %s)",
+            (node_id, object_id, confidence, _json.dumps(bbox) if bbox else None),
+        )
+        return True
+
+    def get_objects_for_node(self, node_id: str) -> list[dict]:
+        """Restituisce gli oggetti rilevati per un nodo File."""
+        return self._query(
+            """SELECT o.*, no.confidence, no.bbox
+               FROM node_objects no
+               JOIN objects o ON o.id = no.object_id
+               WHERE no.node_id = %s
+               ORDER BY no.confidence DESC""",
+            (node_id,),
+        )
+
+    def get_nodes_with_object(self, label: str, limit: int = 100) -> list[dict]:
+        """Trova tutti i nodi File che contengono un certo oggetto."""
+        return self._query(
+            """SELECT n.*, no.confidence
+               FROM node_objects no
+               JOIN objects o ON o.id = no.object_id
+               JOIN nodes n ON n.id = no.node_id
+               WHERE o.label = %s
+               ORDER BY no.confidence DESC
+               LIMIT %s""",
+            (label, limit),
+        )
 
     def delete_node(self, node_id: str) -> bool:
         """Cancella un nodo (cascade elimina anche archi e registry)."""
@@ -654,6 +746,83 @@ class MariaDBStore:
                  VALUES (%s, 'pending', %s)"""
         self._execute(sql, (node_id, priority))
         return int(self._conn.insert_id())
+
+    # ─── BATCH OPERATIONS (fase veloce dell'init) ───────────────
+
+    def create_nodes_batch(self, rows: list[tuple]) -> int:
+        """Inserisce molti nodi in un'unica transazione.
+
+        rows: lista di (node_type, label, category, parent_id, metadata_json|None)
+        """
+        if not rows:
+            return 0
+        sql = """INSERT INTO nodes (id, type, label, category, parent_id, metadata)
+                 VALUES (%s, %s, %s, %s, %s, %s)"""
+        conn = self.connect()
+        node_ids: list[str] = []
+        with conn.cursor() as cur:
+            for node_type, label, category, parent_id, metadata in rows:
+                nid = str(uuid4())
+                cur.execute(sql, (nid, node_type, label, category, parent_id, metadata))
+                node_ids.append(nid)
+            conn.commit()
+        return len(node_ids)
+
+    def create_edges_batch(self, rows: list[tuple]) -> int:
+        """Inserisce molti archi in un'unica transazione.
+
+        rows: lista di (source_id, target_id, relation, weight, metadata_json|None)
+        """
+        if not rows:
+            return 0
+        sql = """INSERT INTO edges (source_id, target_id, relation, weight, metadata)
+                 VALUES (%s, %s, %s, %s, %s)"""
+        conn = self.connect()
+        with conn.cursor() as cur:
+            for source_id, target_id, relation, weight, metadata in rows:
+                cur.execute(sql, (source_id, target_id, relation, weight, metadata))
+            conn.commit()
+        return len(rows)
+
+    def register_files_batch(self, rows: list[tuple]) -> int:
+        """Registra molte posizioni fisiche in un'unica transazione.
+
+        rows: lista di (device, path, size_bytes, sha256, mime_type, node_id)
+        """
+        if not rows:
+            return 0
+        # Pre-mappa device → device_id (evita query per riga)
+        device_ids: dict[str, int] = {}
+        mount_roots: dict[int, Optional[str]] = {}
+        for device, _p, _s, _h, _m, _nid in rows:
+            if device not in device_ids:
+                dev = self.get_device_by_label(device)
+                device_ids[device] = dev["id"] if dev else self.ensure_device(label=device)
+                mount_roots[device_ids[device]] = self.resolve_mount_root(device_ids[device])
+
+        sql = """INSERT INTO file_registry (node_id, device, device_id, path, size_bytes, sha256, mime_type)
+                 VALUES (%s, %s, %s, %s, %s, %s, %s)"""
+        conn = self.connect()
+        with conn.cursor() as cur:
+            for device, path, size_bytes, sha256, mime_type, node_id in rows:
+                did = device_ids[device]
+                stored_path = self._compute_rel_path(path, mount_roots.get(did))
+                cur.execute(sql, (node_id, device, did, stored_path, size_bytes, sha256, mime_type))
+            conn.commit()
+        return len(rows)
+
+    def enqueue_batch(self, node_ids: list[str], priority: int = 0) -> int:
+        """Accoda molti nodi in un'unica transazione."""
+        if not node_ids:
+            return 0
+        sql = """INSERT INTO ingestion_queue (node_id, status, priority)
+                 VALUES (%s, 'pending', %s)"""
+        conn = self.connect()
+        with conn.cursor() as cur:
+            for nid in node_ids:
+                cur.execute(sql, (nid, priority))
+            conn.commit()
+        return len(node_ids)
 
     def dequeue(self, limit: int = 1) -> list[dict]:
         """Preleva i prossimi elementi pending (più prioritari prima)."""

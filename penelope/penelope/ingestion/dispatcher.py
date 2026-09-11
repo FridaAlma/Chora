@@ -22,6 +22,7 @@ import time
 from typing import Optional
 
 from penelope.db.mariadb_store import MariaDBStore
+from penelope.ingestion.metadata import classify_category, _guess_mime
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,8 @@ ENABLE_EXIF = True
 ENABLE_EMBEDDING = True
 ENABLE_IMAGE_EMBEDDING = True  # CLIP per immagini
 ENABLE_NER = True
-ENABLE_FACE = True    # YOLOv8n per rilevamento volti
-ENABLE_SCENE = True  # Scene detection con PySceneDetect
+ENABLE_FACE = True    # YOLOv8n + InsightFace per rilevamento volti
+ENABLE_SCENE = True  # Scene detection con PySceneDetect (DISATTIVATO: si usano metadati video)
 ENABLE_DATE_EVENTS = True  # Event nodes da data (nome file / EXIF)
 ENABLE_GEOCODING = True  # Reverse geocoding GPS → Location
 
@@ -92,85 +93,28 @@ class Dispatcher:
                 self.db.mark_done(queue_id, error="registry_not_found")
                 return False
 
-            # Risolve path assoluto (mount_root + path relativo, o path inalterato se gia\' assoluto)
+            # Risolve path assoluto (mount_root + path relativo, o path inalterato se gia' assoluto)
             file_path = self.db.resolve_file_path(file_info[0])
 
-            # ─── Stage 1: EXIF (foto) ──────────────────────────
-            exif_ok = False
-            if ENABLE_EXIF:
-                try:
-                    from penelope.ingestion.processor import process_exif
-                    exif_ok = process_exif(node_id, file_path, self.db)
-                except Exception as e:
-                    logger.debug("EXIF fallito per %s: %s", file_path, e)
+            # ─── ROUTING PER CATEGORIA ──────────────────────────
+            # image  → YOLO oggetti + InsightFace se persona + EXIF + CLIP + date/geo
+            # video  → solo metadati contenitore + relazioni (nessuna scene detection)
+            # document → NER + embedding + SIMILAR_TO + date
+            # other  → embedding base + date
+            from penelope.ingestion.metadata import _guess_mime as _gm, classify_category as _cc
+            category = _cc(_gm(Path(file_path)), Path(file_path))
 
-            # ─── Stage 2: Embedding testo (MiniLM) ─────────────
-            emb_ok = False
-            if ENABLE_EMBEDDING and self.chroma:
-                try:
-                    from penelope.ingestion.processor import process_embedding
-                    emb_ok = process_embedding(node_id, file_path, self.db, self.chroma)
-                except Exception as e:
-                    logger.debug("Embedding testo fallito per %s: %s", file_path, e)
+            ok = False
+            if category == "image":
+                ok = self._process_image(node_id, file_path)
+            elif category == "video":
+                ok = self._process_video(node_id, file_path)
+            elif category == "document":
+                ok = self._process_document(node_id, file_path)
+            else:
+                ok = self._process_other(node_id, file_path)
 
-            # ─── Stage 3: Embedding immagini (CLIP) ────────────
-            img_emb_ok = False
-            if ENABLE_IMAGE_EMBEDDING and self.chroma:
-                try:
-                    from penelope.ingestion.processor import process_image_embedding
-                    img_emb_ok = process_image_embedding(node_id, file_path, self.db, self.chroma)
-                except Exception as e:
-                    logger.debug("Embedding immagine fallito per %s: %s", file_path, e)
-
-            # ─── Stage 4: NER (testo) ──────────────────────────
-            ner_ok = False
-            if ENABLE_NER:
-                try:
-                    from penelope.ingestion.processor import process_ner
-                    ner_ok = process_ner(node_id, file_path, self.db) > 0
-                except Exception as e:
-                    logger.debug("NER fallito per %s: %s", file_path, e)
-
-            # ─── Stage 5: Face detection (foto) — YOLOv8n ──────
-            face_ok = False
-            if ENABLE_FACE:
-                try:
-                    from penelope.ingestion.processor import process_face_detection
-                    face_ok = process_face_detection(node_id, file_path, self.db)
-                except Exception as e:
-                    logger.debug("Face detection fallito per %s: %s", file_path, e)
-
-            # ─── Stage 6: Event nodes da data ────────────────
-            event_ok = False
-            if ENABLE_DATE_EVENTS:
-                try:
-                    from penelope.ingestion.processor import process_date_event
-                    event_ok = process_date_event(node_id, file_path, self.db)
-                except Exception as e:
-                    logger.debug("Event creation fallito per %s: %s", file_path, e)
-
-            # ─── Stage 7: Geocoding GPS ──────────────────────
-            geo_ok = False
-            if ENABLE_GEOCODING:
-                try:
-                    from penelope.ingestion.processor import process_geocoding
-                    geo_ok = process_geocoding(node_id, file_path, self.db)
-                except Exception as e:
-                    logger.debug("Geocoding fallito per %s: %s", file_path, e)
-
-            # ─── Stage 8: Scene detection (video) ─────────────
-            if ENABLE_SCENE:
-                try:
-                    from penelope.ingestion.processor import process_scene_detection
-                    process_scene_detection(node_id, file_path, self.db)
-                except Exception as e:
-                    logger.debug("Scene detection fallito: %s", e)
-
-            success = exif_ok or emb_ok or img_emb_ok or ner_ok or face_ok or event_ok or geo_ok
             self.db.mark_done(queue_id)
-            if success:
-                logger.debug("Processato: %s (exif=%s emb=%s img_emb=%s ner=%s face=%s event=%s geo=%s)",
-                             file_path, exif_ok, emb_ok, img_emb_ok, ner_ok, face_ok, event_ok, geo_ok)
             return True
 
         except Exception as e:
@@ -178,6 +122,128 @@ class Dispatcher:
                          queue_id, node_id, e)
             self.db.mark_done(queue_id, error=str(e))
             return False
+
+    # ─── Processamento per categoria ──────────────────────────────
+
+    def _process_image(self, node_id: str, file_path: str) -> bool:
+        """Immagini: YOLO oggetti + InsightFace (se persona) + EXIF + CLIP + date/geo."""
+        ok = False
+
+        # YOLO (oggetti) + face (se persona) — evita ri-analisi
+        try:
+            from penelope.ingestion.analyzer import analyze_image
+            res = analyze_image(node_id, file_path, self.db)
+            ok = bool(res.get("objects")) or res.get("faces", 0) > 0
+        except Exception as e:
+            logger.debug("YOLO/face analysis fallito per %s: %s", file_path, e)
+
+        # EXIF (metadati foto)
+        if ENABLE_EXIF:
+            try:
+                from penelope.ingestion.processor import process_exif
+                process_exif(node_id, file_path, self.db)
+            except Exception as e:
+                logger.debug("EXIF fallito per %s: %s", file_path, e)
+
+        # Embedding CLIP
+        if ENABLE_IMAGE_EMBEDDING and self.chroma:
+            try:
+                from penelope.ingestion.processor import process_image_embedding
+                ok = ok or process_image_embedding(node_id, file_path, self.db, self.chroma)
+            except Exception as e:
+                logger.debug("CLIP fallito per %s: %s", file_path, e)
+
+        # Event nodes da data + geocoding GPS
+        if ENABLE_DATE_EVENTS:
+            try:
+                from penelope.ingestion.processor import process_date_event
+                process_date_event(node_id, file_path, self.db)
+            except Exception as e:
+                logger.debug("Date event fallito per %s: %s", file_path, e)
+        if ENABLE_GEOCODING:
+            try:
+                from penelope.ingestion.processor import process_geocoding
+                process_geocoding(node_id, file_path, self.db)
+            except Exception as e:
+                logger.debug("Geocoding fallito per %s: %s", file_path, e)
+
+        return ok
+
+    def _process_video(self, node_id: str, file_path: str) -> bool:
+        """Video: SOLO metadati contenitore + relazioni (Event/Location).
+
+        Nessuna analisi contenuto (scene detection). Il video viene
+        relazionato con gli altri nodi tramite i metadati che contiene.
+        """
+        ok = False
+        try:
+            from penelope.ingestion.analyzer import analyze_video
+            res = analyze_video(node_id, file_path, self.db)
+            ok = bool(res.get("metadata"))
+        except Exception as e:
+            logger.debug("Video metadata fallito per %s: %s", file_path, e)
+
+        # Event da data nel filename/creazione
+        if ENABLE_DATE_EVENTS:
+            try:
+                from penelope.ingestion.processor import process_date_event
+                ok = ok or process_date_event(node_id, file_path, self.db)
+            except Exception as e:
+                logger.debug("Date event per video fallito: %s", e)
+
+        return ok
+
+    def _process_document(self, node_id: str, file_path: str) -> bool:
+        """Documenti: NER + embedding semantico + SIMILAR_TO + date."""
+        ok = False
+        try:
+            from penelope.ingestion.analyzer import analyze_document
+            res = analyze_document(
+                node_id, file_path, self.db,
+                self.chroma if ENABLE_EMBEDDING else None,
+            )
+            ok = bool(res.get("ner_count")) or bool(res.get("embedded")) or bool(res.get("similar"))
+        except Exception as e:
+            logger.debug("Document analysis fallito per %s: %s", file_path, e)
+
+        # Fallback: embedding base
+        if ENABLE_EMBEDDING and self.chroma and not ok:
+            try:
+                from penelope.ingestion.processor import process_embedding
+                ok = process_embedding(node_id, file_path, self.db, self.chroma)
+            except Exception as e:
+                logger.debug("Embedding fallito per %s: %s", file_path, e)
+
+        # Event da data
+        if ENABLE_DATE_EVENTS:
+            try:
+                from penelope.ingestion.processor import process_date_event
+                ok = ok or process_date_event(node_id, file_path, self.db)
+            except Exception as e:
+                logger.debug("Date event per doc fallito: %s", e)
+
+        return ok
+
+    def _process_other(self, node_id: str, file_path: str) -> bool:
+        """Altri file: soli metadati + eventuale embedding testo + date."""
+        ok = False
+
+        # Embedding se testo (anche se mime dice other)
+        if ENABLE_EMBEDDING and self.chroma:
+            try:
+                from penelope.ingestion.processor import process_embedding
+                ok = process_embedding(node_id, file_path, self.db, self.chroma)
+            except Exception as e:
+                logger.debug("Embedding fallito per %s: %s", file_path, e)
+
+        if ENABLE_DATE_EVENTS:
+            try:
+                from penelope.ingestion.processor import process_date_event
+                ok = ok or process_date_event(node_id, file_path, self.db)
+            except Exception as e:
+                logger.debug("Date event per other fallito: %s", e)
+
+        return ok
 
     # ─── Loop di elaborazione ───────────────────────────────────
 
@@ -222,8 +288,8 @@ class Dispatcher:
                     logger.warning("Recuperati %d elementi bloccati dalla coda", stale)
 
         self._running = True
-        logger.info("Dispatcher avviato (interval=%ss, batch=%d, exif=%s emb=%s img_emb=%s ner=%s face=%s)",
-                     interval, batch_size, ENABLE_EXIF, ENABLE_EMBEDDING, ENABLE_IMAGE_EMBEDDING, ENABLE_NER, ENABLE_FACE)
+        logger.info("Dispatcher avviato (interval=%ss, batch=%d, category-routing=on)",
+                     interval, batch_size)
 
         try:
             while self._running:

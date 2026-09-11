@@ -459,7 +459,7 @@ def merge_persons(
 def batch_process_images(db: MariaDBStore, limit: int = 0) -> dict:
     """Processa tutte le immagini del grafo con InsightFace.
 
-    1. Trova immagini senza face_source='insightface'
+    1. Trova immagini senza analisi face (analyzed->face != done)
     2. Per ognuna, rileva volti + embedding
     3. Crea/aggiorna nodi Person
 
@@ -470,18 +470,17 @@ def batch_process_images(db: MariaDBStore, limit: int = 0) -> dict:
     Returns:
         {"processed": int, "with_faces": int}
     """
-    exts = ("%.jpg", "%.jpeg", "%.png", "%.webp", "%.bmp")
     rows = db._query(
-        """SELECT n.id, n.label, f.path 
+        """SELECT n.id, n.label, f.path
         FROM nodes n
         JOIN file_registry f ON f.node_id = n.id
-        WHERE n.type = %s 
-          AND (metadata IS NULL OR metadata NOT LIKE %s)
-          AND (f.path LIKE %s OR f.path LIKE %s OR f.path LIKE %s 
-               OR f.path LIKE %s OR f.path LIKE %s)
+        WHERE n.type = %s
+          AND (n.analyzed IS NULL OR JSON_EXTRACT(n.analyzed, '$.face') != 'done')
+          AND (f.mime_type LIKE %s OR f.mime_type LIKE %s OR f.mime_type LIKE %s
+               OR f.mime_type LIKE %s OR f.mime_type LIKE %s)
         ORDER BY f.path
         """,
-        ("File", "%insightface%") + exts,
+        ("File", "image/jpeg", "image/png", "image/webp", "image/bmp", "image/tiff"),
     )
 
     if limit and limit < len(rows):
@@ -497,8 +496,13 @@ def batch_process_images(db: MariaDBStore, limit: int = 0) -> dict:
             processed += 1
             if result:
                 with_faces += 1
+            # Set analyzed flag
+            from penelope.ingestion.analyzer import set_analyzed_flag, ANALYSIS_FACE
+            set_analyzed_flag(db, r["id"], ANALYSIS_FACE, "done")
         except Exception as e:
             logger.warning("Errore su %s: %s", r["path"], e)
+            from penelope.ingestion.analyzer import set_analyzed_flag, ANALYSIS_FACE
+            set_analyzed_flag(db, r["id"], ANALYSIS_FACE, "error")
 
         if i % 50 == 0:
             logger.info("  [%d/%d] con volti=%d", i, len(rows), with_faces)

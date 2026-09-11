@@ -83,11 +83,14 @@ def index():
             "stats": "/api/stats",
             "nodes": "/api/nodes",
             "graph": "/api/graph",
+            "tree": "/api/tree",
             "search": "/api/search",
             "faces": "/api/faces",
+            "objects": "/api/objects",
             "projects": "/api/projects",
             "events": "/api/events",
             "timeline": "/api/events/timeline",
+            "locations": "/api/locations",
         }
     })
 
@@ -131,6 +134,27 @@ def api_stats():
             cur.execute("SELECT COUNT(*) AS cnt FROM nodes WHERE type='File' AND metadata LIKE '%insightface%'")
             insightface = cur.fetchone()["cnt"]
 
+            # Categoria
+            cur.execute("""
+                SELECT category, COUNT(*) AS cnt
+                FROM nodes
+                WHERE category IS NOT NULL
+                GROUP BY category
+                ORDER BY cnt DESC
+            """)
+            by_category = {r["category"]: r["cnt"] for r in cur.fetchall()}
+
+            # Directory count
+            cur.execute("SELECT COUNT(*) AS cnt FROM nodes WHERE type='Directory'")
+            directory_count = cur.fetchone()["cnt"]
+
+            # Oggetti YOLO
+            cur.execute("SELECT COUNT(*) AS cnt FROM objects")
+            object_count = cur.fetchone()["cnt"]
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM node_objects")
+            node_object_links = cur.fetchone()["cnt"]
+
     except Exception as e:
         logger.error("Errore stats: %s", e)
         return jsonify({"error": str(e)}), 500
@@ -147,6 +171,10 @@ def api_stats():
         "files_with_faces": with_faces,
         "insightface_processed": insightface,
         "persons_with_embeddings": with_embeddings,
+        "by_category": by_category,
+        "directory_count": directory_count,
+        "object_count": object_count,
+        "node_object_links": node_object_links,
         "chroma_text": chroma.count_text(),
         "chroma_images": chroma.count_images(),
         "embedding_files": len(list(Path("data/embeddings").glob("*.npy"))) if Path("data/embeddings").exists() else 0,
@@ -374,6 +402,8 @@ def api_graph():
             "Location": {"color": "#2ecc71", "shape": "triangle"},
             "Project": {"color": "#f39c12", "shape": "star"},
             "Event": {"color": "#9b59b6", "shape": "diamond"},
+            "Directory": {"color": "#1abc9c", "shape": "hexagon"},
+            "Object": {"color": "#e67e22", "shape": "square"},
         }
 
         # Campionamento intelligente: prendi tutti i progetti, le location, le persone con embedding, e un campione di file
@@ -394,6 +424,9 @@ def api_graph():
         add_nodes(project_nodes)          # tutti i progetti
         add_nodes(person_nodes, 300)      # max 300 persone
         add_nodes(location_nodes, 200)    # max 200 location
+        # Directory: seleziona come gerarchia, non tutte (potrebbero essere tante)
+        dir_nodes = [(n,d) for n,d in all_nodes if d.get("type")=="Directory"]
+        add_nodes(dir_nodes, 200)  # max 200 directory
         add_nodes(file_nodes, min(len(file_nodes), MAX_NODES - len(selected)))  # riempie fino a MAX_NODES
 
         # Costruisce nodi
@@ -434,6 +467,61 @@ def api_graph():
 
     except Exception as e:
         logger.error("Errore grafo: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ─── API: Albero directory (gerarchia filesystem) ──────────────────
+
+
+@app.route("/api/tree")
+def api_tree():
+    """Restituisce l'albero gerarchico (Directory → File) per il frontend.
+
+    Query param:
+        project: ID della Project (default: tutte)
+        depth: profondità massima (default: 10)
+    """
+    try:
+        refresh = request.args.get("refresh", "0") == "1"
+        if refresh or bridge.graph.number_of_nodes() == 0:
+            bridge.load_from_db()
+
+        project = request.args.get("project")
+        depth = min(int(request.args.get("depth", 10)), 20)
+
+        tree = bridge.directory_tree(root_id=project, max_depth=depth)
+
+        # Aggiunge info extra ai nodi File (path, mime, size)
+        def _enrich(node, parent_path=""):
+            meta = node.get("metadata", {}) or {}
+            ntype = node.get("type")
+            item = {
+                "id": node["id"],
+                "label": node.get("label", "?"),
+                "type": ntype,
+                "category": node.get("category"),
+                "path": meta.get("path") if isinstance(meta, dict) else None,
+            }
+            if ntype == "File" and isinstance(meta, dict):
+                item["mime_type"] = meta.get("mime_type")
+                item["size_bytes"] = meta.get("size_bytes")
+                item["extension"] = meta.get("extension")
+                item["yolo_objects"] = meta.get("yolo_object_summary")
+                item["face_count"] = meta.get("face_count", 0)
+            children = node.get("children", [])
+            if children:
+                item["children"] = [_enrich(c) for c in children]
+                dirs = [c for c in children if c.get("type") == "Directory"]
+                files = [c for c in children if c.get("type") == "File"]
+                item["directory_count"] = len(dirs)
+                item["file_count"] = len(files)
+            return item
+
+        result = [_enrich(r) for r in tree.get("_tree", [])]
+        return jsonify({"tree": result})
+
+    except Exception as e:
+        logger.error("Errore tree: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -481,6 +569,55 @@ def api_search():
     except Exception as e:
         logger.error("Errore search: %s", e)
         return jsonify({"error": str(e), "results": []}), 500
+
+
+# ─── API: Oggetti YOLO ─────────────────────────────────────────────
+
+
+@app.route("/api/objects")
+def api_objects():
+    """Lista oggetti rilevati (YOLO) nel grafo."""
+    cur = _get_cursor()
+    try:
+        limit = min(int(request.args.get("limit", 50)), 200)
+        offset = int(request.args.get("offset", 0))
+        category = request.args.get("category")
+
+        where = ""
+        params = []
+        if category:
+            where = "WHERE o.category = %s"
+            params.append(category)
+
+        cur.execute(
+            f"""SELECT o.id, o.label, o.coco_class_id, o.category, o.created_at,
+                       COUNT(no.id) AS file_count,
+                       ROUND(AVG(no.confidence), 2) AS avg_confidence
+                FROM objects o
+                LEFT JOIN node_objects no ON no.object_id = o.id
+                {where}
+                GROUP BY o.id
+                ORDER BY file_count DESC
+                LIMIT %s OFFSET %s""",
+            tuple(params) + (limit, offset),
+        )
+        objects = [{
+            "id": r["id"],
+            "label": r["label"],
+            "coco_class_id": r["coco_class_id"],
+            "category": r["category"],
+            "file_count": r["file_count"],
+            "avg_confidence": r["avg_confidence"],
+        } for r in cur.fetchall()]
+
+        cur.execute(f"SELECT COUNT(*) AS cnt FROM objects o {where}", tuple(params))
+        total = cur.fetchone()["cnt"]
+
+        return jsonify({"objects": objects, "total": total})
+
+    except Exception as e:
+        logger.error("Errore objects: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 # ─── API: Facce ────────────────────────────────────────────────────
@@ -549,7 +686,8 @@ def api_projects():
     try:
         cur.execute("""
             SELECT n.id, n.label, n.metadata, n.created_at,
-                   (SELECT COUNT(*) FROM edges e WHERE e.target_id = n.id AND e.relation = 'MEMBER_OF') as file_count
+                   (SELECT COUNT(*) FROM edges e WHERE e.target_id = n.id AND e.relation = 'CONTAINS') as child_count,
+                   (SELECT COUNT(*) FROM edges e WHERE e.target_id = n.id AND e.relation = 'MEMBER_OF') as member_count
             FROM nodes n
             WHERE n.type = 'Project'
             ORDER BY n.label
@@ -566,7 +704,9 @@ def api_projects():
             projects.append({
                 "id": r["id"],
                 "label": r["label"],
-                "file_count": r["file_count"],
+                "file_count": r["child_count"] + r["member_count"],
+                "directory_count": r["child_count"],
+                "member_count": r["member_count"],
                 "path": meta.get("path", ""),
                 "device": meta.get("device", ""),
                 "created_at": str(r["created_at"]) if r.get("created_at") else None,

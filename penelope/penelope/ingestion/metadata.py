@@ -41,6 +41,11 @@ class FileMetadata:
         """MIME type basato su estensione (leggero, senza leggere il file)."""
         return _guess_mime(self.path)
 
+    @property
+    def category(self) -> str:
+        """Categoria file: image, video, document, other."""
+        return classify_category(self.mime_type)
+
     def to_dict(self) -> dict:
         return {
             "path": str(self.path),
@@ -49,9 +54,44 @@ class FileMetadata:
             "size_bytes": self.size_bytes,
             "sha256": self.sha256,
             "mime_type": self.mime_type,
+            "category": self.category,
             "created": datetime.fromtimestamp(self.created_ts).isoformat(),
             "modified": datetime.fromtimestamp(self.modified_ts).isoformat(),
         }
+
+
+# ─── Classificazione categoria file ────────────────────────────────
+
+def classify_category(mime_type: str, path: Optional[Path] = None) -> str:
+    """Classifica un file in image|video|document|other.
+
+    Usa prima il MIME type, poi fallback su estensione.
+    """
+    if mime_type.startswith("image/"):
+        return "image"
+    if mime_type.startswith("video/"):
+        return "video"
+    if mime_type.startswith("text/") or mime_type in (
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.oasis.opendocument.text",
+    ):
+        return "document"
+    # Fallback su estensione
+    if path:
+        ext = path.suffix.lower()
+        if ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt"):
+            return "document"
+        if ext in (".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml", ".cfg", ".ini", ".env",
+                    ".py", ".js", ".ts", ".html", ".css", ".sh", ".sql", ".c", ".cpp", ".h", ".java", ".go",
+                    ".rs", ".rb", ".php"):
+            return "document"
+    return "other"
 
 
 def _compute_sha256(path: Path, chunk_size: int = 65536) -> str:

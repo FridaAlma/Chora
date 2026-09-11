@@ -122,7 +122,11 @@ def cmd_scan(args):
         sys.exit(1)
 
     scanner = FileScanner(device_name=device)
-    results = scanner.scan_directory(path, project_label=args.project)
+    results = scanner.scan_directory(
+        path,
+        project_label=args.project,
+        deep=args.deep,
+    )
 
     # Report
     ok = sum(1 for r in results if r.success)
@@ -134,6 +138,10 @@ def cmd_scan(args):
     print(f"   [HSD]  Saltati:       {skipped}")
     print(f"   [ERR]  Errori:        {errors}")
     print(f"   [PROJ] Progetto:      {args.project or path.name}")
+    print(f"   [MODE] Profondita':    {'deep (YOLO+face+doc+video)' if args.deep else 'gerarchia + categoria (veloce)'}")
+    if args.deep:
+        print(f"\n   Le analisi profonde sono state eseguite sincronamente.")
+        print(f"   Per analisi asincrona usa: penelope queue loop")
 
 
 def cmd_scan_all(args):
@@ -218,6 +226,53 @@ def cmd_search(args):
         print(f"    node: {r['node_id']}")
         if r['snippet']:
             print(f"    ...{r['snippet'][:150]}...")
+
+
+def cmd_tree(args):
+    """Mostra l'albero gerarchico (directory → file) dal grafo."""
+    bridge = GraphBridge()
+    bridge.load_from_db()
+
+    tree = bridge.directory_tree(root_id=args.project, max_depth=args.depth)
+    roots = tree.get("_tree", [])
+
+    if not roots:
+        print("[TREE] Nessuna directory nel grafo. Esegui: penelope scan <path>")
+        return
+
+    def _print(node, prefix="", is_last=True, label_only=False):
+        marker = "└── " if is_last else "├── "
+        children = node.get("children", [])
+        ntype = node.get("type", "?")
+        cat = node.get("category") or ""
+        lbl = node.get("label", "?")
+
+        if ntype == "Directory":
+            print(f"{prefix}{marker}📁 {lbl}/ ({len(children)} figli)")
+        else:
+            icon = {"image": "🖼", "video": "🎬", "document": "📄", "other": "📦"}.get(cat, "📄")
+            print(f"{prefix}{marker}{icon} {lbl} [{cat or 'n/a'}]")
+            return
+
+        # Children: directory prima, poi file
+        dirs = [c for c in children if c.get("type") == "Directory"]
+        files = [c for c in children if c.get("type") == "File"]
+        all_c = dirs + files
+        for i, c in enumerate(all_c):
+            child_prefix = prefix + ("    " if is_last else "│   ")
+            _print(c, child_prefix, i == len(all_c) - 1)
+
+    for i, root in enumerate(roots):
+        is_last = i == len(roots) - 1
+        rtype = root.get("type")
+        rlbl = root.get("label", "?")
+        if rtype == "Project":
+            print(f"⭐ {rlbl}/")
+            children = root.get("children", [])
+            for j, c in enumerate(children):
+                _print(c, "", j == len(children) - 1)
+        else:
+            _print(root, "", is_last)
 
 
 def cmd_graph(args):
@@ -1313,10 +1368,12 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     # scan
-    p_scan = sub.add_parser("scan", help="Scansiona una directory")
+    p_scan = sub.add_parser("scan", help="Scansiona una directory (gerarchica)")
     p_scan.add_argument("path", help="Directory da scandire")
     p_scan.add_argument("--device", default=None, help="Nome del dispositivo (es. headless, hdd-ext)")
     p_scan.add_argument("--project", default=None, help="Nome del progetto (default: nome cartella)")
+    p_scan.add_argument("--deep", action="store_true",
+                        help="Analisi profonda: YOLO oggetti, face recognition, NER documenti, metadati video (lento)")
     p_scan.set_defaults(func=cmd_scan)
 
     # watchdog
@@ -1327,6 +1384,12 @@ def main():
     p_wd.add_argument("--device", default="watchdog", help="Nome dispositivo")
     p_wd.add_argument("--project", help="Nome progetto (default: nome cartella)")
     p_wd.set_defaults(func=cmd_watchdog)
+
+    # tree
+    p_tree = sub.add_parser("tree", help="Mostra l'albero gerarchico (directory → file)")
+    p_tree.add_argument("--project", default=None, help="Project node ID (default: tutte le Project)")
+    p_tree.add_argument("--depth", type=int, default=10, help="Profondità massima (default: 10)")
+    p_tree.set_defaults(func=cmd_tree)
 
     # scan:all
     p_all = sub.add_parser("scan:all", help="Scansiona tutti gli storage configurati")

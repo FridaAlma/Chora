@@ -38,10 +38,15 @@ class GraphBridge:
             rows = store._query("SELECT * FROM nodes")
             for row in rows:
                 meta = json.loads(row["metadata"]) if row.get("metadata") else {}
+                # category/parent_id sono colonne dedicate: non devono duplicarsi in **meta
+                meta.pop("category", None)
+                meta.pop("parent_id", None)
                 self.graph.add_node(
                     row["id"],
                     type=row["type"],
                     label=row["label"],
+                    category=row.get("category"),
+                    parent_id=row.get("parent_id"),
                     created_at=str(row["created_at"]),
                     **meta,
                 )
@@ -67,6 +72,8 @@ class GraphBridge:
         if node_id not in self.graph:
             return
         data = self.graph.nodes[node_id]
+        category = data.get("category")
+        parent_id = data.get("parent_id")
         with self.db as store:
             existing = store.get_node(node_id)
             if existing:
@@ -77,6 +84,8 @@ class GraphBridge:
                     node_type=data.get("type", "File"),
                     label=data.get("label"),
                     metadata=data.get("metadata"),
+                    category=category,
+                    parent_id=parent_id,
                 )
 
     def sync_edge_to_db(self, u: str, v: str, key: Any) -> None:
@@ -171,3 +180,52 @@ class GraphBridge:
             "nodes": self.graph.number_of_nodes(),
             "edges": self.graph.number_of_edges(),
         }
+
+    # ─── Gerarchia filesystem ────────────────────────────────────
+
+    def children_of(self, parent_id: str) -> list[dict]:
+        """Restituisce i figli diretti di un nodo (edge CONTAINS)."""
+        children = []
+        for u, v, k, data in self.graph.out_edges(parent_id, keys=True, data=True):
+            if data.get("relation") != "CONTAINS":
+                continue
+            children.append({
+                "node_id": v,
+                "node_data": dict(self.graph.nodes[v]),
+                "weight": data.get("weight", 1.0),
+            })
+        return children
+
+    def directory_tree(self, root_id: Optional[str] = None, max_depth: int = 10) -> dict:
+        """Costruisce l'albero directory partendo da un nodo (default: tutte le Project)."""
+        if root_id is None:
+            # Radici: tutte le Project + eventuali Directory senza genitore (orfane)
+            project_ids = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "Project"]
+            dir_ids = [
+                n for n, d in self.graph.nodes(data=True)
+                if d.get("type") == "Directory" and not d.get("parent_id") and n not in project_ids
+            ]
+            roots = project_ids + dir_ids
+        else:
+            roots = [root_id]
+
+        def _expand(nid: str, depth: int) -> dict:
+            data = dict(self.graph.nodes[nid])
+            node = {
+                "id": nid,
+                "label": data.get("label", nid[:8]),
+                "type": data.get("type", "?"),
+                "category": data.get("category"),
+                "metadata": data.get("metadata", {}),
+            }
+            if depth < max_depth:
+                node["children"] = [
+                    _expand(c["node_id"], depth + 1)
+                    for c in self.children_of(nid)
+                    if self.graph.nodes[c["node_id"]].get("type") in ("Directory", "File")
+                ]
+            else:
+                node["children"] = []
+            return node
+
+        return {"_tree": [_expand(r, 0) for r in roots]}
