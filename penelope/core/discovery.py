@@ -196,7 +196,7 @@ def ensure_storage_in_env(path: str | Path) -> str:
         ValueError: se tutti gli slot sono occupati e il path è nuovo.
     """
     import os as _os
-    from penelope.config import settings as _settings
+    from core.config import settings as _settings
 
     target_path = str(Path(path).resolve())
     env_path = Path(_settings.__file__).resolve().parent.parent.parent / ".env"

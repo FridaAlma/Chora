@@ -13,7 +13,7 @@ import pytest
 @pytest.fixture
 def chroma_store(request):
     """Crea un'istanza ChromaStore con directory temporanea."""
-    from penelope.db.chroma_store import ChromaStore
+    from core.db.chroma_store import ChromaStore
     tmpdir = tempfile.mkdtemp()
     store = ChromaStore(persist_dir=tmpdir)
 
@@ -130,7 +130,7 @@ def test_text_vs_image_collections_separate(chroma_store):
 
 def test_close_reopen(tmp_path):
     """Chiusura e riapertura della stessa directory deve preservare i dati."""
-    from penelope.db.chroma_store import ChromaStore
+    from core.db.chroma_store import ChromaStore
 
     persist = tmp_path / "chroma_test"
 

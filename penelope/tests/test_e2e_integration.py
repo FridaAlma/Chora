@@ -95,7 +95,7 @@ class TestE2EPipeline:
 
     def test_scan_to_queue(self, temp_workspace, mock_db):
         """Test: scansione → registrazione MariaDB → coda."""
-        from penelope.ingestion.scanner import FileScanner
+        from core.ingestion.scanner import FileScanner
         from egida.filters import HSDFilter
         from egida.quarantine import Quarantine
 
@@ -135,7 +135,7 @@ class TestE2EPipeline:
 
     def test_duplicate_sha256_skipped(self, temp_workspace, mock_db):
         """Test: file duplicato (stesso SHA-256) deve essere saltato."""
-        from penelope.ingestion.scanner import FileScanner
+        from core.ingestion.scanner import FileScanner
 
         # Simula file già esistente
         def query_with_dup(sql, params=None):
@@ -156,7 +156,7 @@ class TestE2EPipeline:
 
     def test_dispatcher_processes_items(self, mock_db):
         """Test: dispatcher elabora elementi dalla coda."""
-        from penelope.ingestion.dispatcher import Dispatcher
+        from core.ingestion.dispatcher import Dispatcher
 
         # Mock dequeue per restituire elementi
         mock_db.dequeue.return_value = [
@@ -172,7 +172,7 @@ class TestE2EPipeline:
 
     def test_dispatcher_loop_resets_stale(self, mock_db):
         """Test: loop dispatcher resetta elementi stale all'avvio."""
-        from penelope.ingestion.dispatcher import Dispatcher
+        from core.ingestion.dispatcher import Dispatcher
 
         mock_db.reset_stale_processing.return_value = 3
 
@@ -186,7 +186,7 @@ class TestE2EPipeline:
 
     def test_graph_bridge_load_and_query(self, temp_workspace):
         """Test: GraphBridge carica da MariaDB e interroga il grafo."""
-        from penelope.db.graph_bridge import GraphBridge
+        from core.db.graph_bridge import GraphBridge
 
         db_mock = MagicMock()
         db_mock.__enter__.return_value = db_mock
@@ -236,7 +236,7 @@ class TestE2EPipeline:
 
         tmpdir = Path(tempfile.mkdtemp())
         try:
-            from penelope.db.chroma_store import ChromaStore
+            from core.db.chroma_store import ChromaStore
 
             store = ChromaStore(persist_dir=str(tmpdir))
 
@@ -291,7 +291,7 @@ class TestE2EPipeline:
 
     def test_scene_detection_non_video(self):
         """Test: scene detection su file non video ritorna False."""
-        from penelope.ingestion.processor import process_scene_detection
+        from core.ingestion.processor import process_scene_detection
         db = MagicMock()
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as f:
@@ -300,7 +300,7 @@ class TestE2EPipeline:
 
     def test_face_detection_non_image(self):
         """Test: face detection su file non immagine ritorna False."""
-        from penelope.ingestion.processor import process_face_detection
+        from core.ingestion.processor import process_face_detection
         db = MagicMock()
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as f:
@@ -309,7 +309,7 @@ class TestE2EPipeline:
 
     def test_ner_skips_non_text(self):
         """Test: NER su file non testuale ritorna 0."""
-        from penelope.ingestion.processor import process_ner
+        from core.ingestion.processor import process_ner
         db = MagicMock()
 
         with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
@@ -318,7 +318,7 @@ class TestE2EPipeline:
 
     def test_exif_skips_non_image(self):
         """Test: EXIF su file non immagine ritorna False."""
-        from penelope.ingestion.processor import process_exif
+        from core.ingestion.processor import process_exif
         db = MagicMock()
 
         with tempfile.NamedTemporaryFile(suffix=".txt") as f:

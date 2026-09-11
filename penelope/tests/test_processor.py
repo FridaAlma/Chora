@@ -32,7 +32,7 @@ def _make_db(**kwargs):
 
 def test_process_exif_no_image():
     """File non immagine → skip."""
-    from penelope.ingestion.processor import process_exif
+    from core.ingestion.processor import process_exif
     db = _make_db()
     result = process_exif("node-1", "/tmp/test.txt", db)
     assert not result
@@ -40,7 +40,7 @@ def test_process_exif_no_image():
 
 def test_process_exif_no_pillow():
     """Pillow non installato → skip graceful."""
-    from penelope.ingestion.processor import process_exif
+    from core.ingestion.processor import process_exif
     db = _make_db()
     with patch.dict("sys.modules", {"PIL": None}):
         # Crea un file immagine finto
@@ -53,7 +53,7 @@ def test_process_exif_no_pillow():
 
 def test_process_embedding_non_text():
     """File non testuale → skip."""
-    from penelope.ingestion.processor import process_embedding
+    from core.ingestion.processor import process_embedding
     db = _make_db()
     chroma = MagicMock()
     with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
@@ -63,7 +63,7 @@ def test_process_embedding_non_text():
 
 def test_process_embedding_too_short():
     """File troppo corto → skip."""
-    from penelope.ingestion.processor import process_embedding
+    from core.ingestion.processor import process_embedding
     db = _make_db()
     chroma = MagicMock()
     with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False) as f:
@@ -78,7 +78,7 @@ def test_process_embedding_too_short():
 
 def test_process_embedding_success():
     """File testuale valido → embedding generato."""
-    from penelope.ingestion.processor import process_embedding
+    from core.ingestion.processor import process_embedding
     db = _make_db()
     chroma = MagicMock()
     chroma.index_text.return_value = True
@@ -96,7 +96,7 @@ def test_process_embedding_success():
 
 def test_process_image_embedding_non_image():
     """File non immagine → skip."""
-    from penelope.ingestion.processor import process_image_embedding
+    from core.ingestion.processor import process_image_embedding
     db = _make_db()
     chroma = MagicMock()
     with tempfile.NamedTemporaryFile(suffix=".txt") as f:
@@ -108,7 +108,7 @@ def test_process_image_embedding_non_image():
 
 def test_process_ner_non_text():
     """File non testuale → skip."""
-    from penelope.ingestion.processor import process_ner
+    from core.ingestion.processor import process_ner
     db = _make_db()
     with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
         result = process_ner("node-1", f.name, db)
@@ -117,7 +117,7 @@ def test_process_ner_non_text():
 
 def test_process_ner_binary_file():
     """File non testuale → 0 entità (nessuna chiamata a SpaCy)."""
-    from penelope.ingestion.processor import process_ner
+    from core.ingestion.processor import process_ner
     db = _make_db()
     with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
         result = process_ner("node-1", f.name, db)
@@ -128,7 +128,7 @@ def test_process_ner_binary_file():
 
 def test_process_face_detection_non_image():
     """File non immagine → skip."""
-    from penelope.ingestion.processor import process_face_detection
+    from core.ingestion.processor import process_face_detection
     db = _make_db()
     with tempfile.NamedTemporaryFile(suffix=".txt") as f:
         result = process_face_detection("node-1", f.name, db)
@@ -137,7 +137,7 @@ def test_process_face_detection_non_image():
 
 def test_process_face_detection_no_yolo():
     """Ultralytics non installato → skip graceful."""
-    from penelope.ingestion.processor import process_face_detection
+    from core.ingestion.processor import process_face_detection
     db = _make_db()
     with patch.dict("sys.modules", {"ultralytics": None}):
         with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
@@ -147,7 +147,7 @@ def test_process_face_detection_no_yolo():
 
 def test_process_face_detection_svg_skip():
     """File SVG → skip."""
-    from penelope.ingestion.processor import process_face_detection
+    from core.ingestion.processor import process_face_detection
     db = _make_db()
     with tempfile.NamedTemporaryFile(suffix=".svg", mode="w") as f:
         f.write("<svg></svg>")
@@ -159,7 +159,7 @@ def test_process_face_detection_svg_skip():
 
 def test_process_scene_detection_non_video():
     """File non video → skip."""
-    from penelope.ingestion.processor import process_scene_detection
+    from core.ingestion.processor import process_scene_detection
     db = _make_db()
     with tempfile.NamedTemporaryFile(suffix=".txt") as f:
         result = process_scene_detection("node-1", f.name, db)
@@ -168,7 +168,7 @@ def test_process_scene_detection_non_video():
 
 def test_process_scene_detection_no_scenedetect():
     """PySceneDetect non installato → skip graceful."""
-    from penelope.ingestion.processor import process_scene_detection
+    from core.ingestion.processor import process_scene_detection
     db = _make_db()
     with patch.dict("sys.modules", {"scenedetect": None}):
         result = process_scene_detection("node-1", "/tmp/video.mp4", db)

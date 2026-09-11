@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from penelope.db.mariadb_store import MariaDBStore
-from penelope.config import settings
+from core.db.mariadb_store import MariaDBStore
+from core.config import settings
 
 logger = logging.getLogger("migration_006")
 

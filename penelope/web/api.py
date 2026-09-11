@@ -26,10 +26,10 @@ from flask_cors import CORS
 
 import threading
 
-from penelope.db.mariadb_store import MariaDBStore
-from penelope.db.graph_bridge import GraphBridge
-from penelope.db.chroma_store import ChromaStore
-from penelope.config import settings
+from core.db.mariadb_store import MariaDBStore
+from core.db.graph_bridge import GraphBridge
+from core.db.chroma_store import ChromaStore
+from core.config import settings
 
 
 # ─── Helper: risolve path assoluto (mount_root + path relativo) ───

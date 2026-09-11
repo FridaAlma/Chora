@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import networkx as nx
 
-from penelope.db.mariadb_store import MariaDBStore
+from core.db.mariadb_store import MariaDBStore
 
 logger = logging.getLogger(__name__)
 

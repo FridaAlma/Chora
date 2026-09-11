@@ -16,9 +16,9 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from penelope.db.chroma_store import ChromaStore
-from penelope.db.mariadb_store import MariaDBStore
-from penelope.ingestion.metadata import _guess_mime, MIME_MAP
+from core.db.chroma_store import ChromaStore
+from core.db.mariadb_store import MariaDBStore
+from core.ingestion.metadata import _guess_mime, MIME_MAP
 
 logger = logging.getLogger(__name__)
 

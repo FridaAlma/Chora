@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from penelope.ingestion.scanner import FileScanner, _should_skip
+from core.ingestion.scanner import FileScanner, _should_skip
 
 
 def test_should_skip():

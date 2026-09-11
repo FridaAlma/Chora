@@ -36,8 +36,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=str(_PROJECT_ROOT / ".env"), override=True)
 
-from penelope.db.mariadb_store import MariaDBStore
-from penelope.ingestion.project_detection import (
+from core.db.mariadb_store import MariaDBStore
+from core.ingestion.project_detection import (
     cluster_projects,
     project_label_from_boundary,
 )

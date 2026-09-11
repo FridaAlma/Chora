@@ -14,8 +14,8 @@ from pathlib import Path
 # Aggiunge radice progetto al path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from penelope.db.mariadb_store import MariaDBStore
-from penelope.ingestion.processor import process_face_detection
+from core.db.mariadb_store import MariaDBStore
+from core.ingestion.processor import process_face_detection
 
 logging.basicConfig(
     level=logging.INFO,

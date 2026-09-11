@@ -16,7 +16,7 @@ from typing import Optional
 import chromadb
 from chromadb.config import Settings
 
-from penelope.config import settings as penelope_settings
+from core.config import settings as penelope_settings
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class ChromaStore:
             True se successo, False altrimenti.
         """
         try:
-            from penelope.ingestion.image_embedder import get_image_embedding
+            from core.ingestion.image_embedder import get_image_embedding
 
             embedding = get_image_embedding(image_path)
             if embedding is None:
@@ -245,7 +245,7 @@ class ChromaStore:
         # 2. Cerca tra le immagini (CLIP) — cross-modale
         if include_images:
             try:
-                from penelope.ingestion.image_embedder import get_text_embedding
+                from core.ingestion.image_embedder import get_text_embedding
 
                 clip_emb = get_text_embedding(query)
                 if clip_emb is not None:

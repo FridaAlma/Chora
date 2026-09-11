@@ -21,7 +21,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from penelope.db.mariadb_store import MariaDBStore
+from core.db.mariadb_store import MariaDBStore
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +218,7 @@ def process_face_embedding(
     Returns:
         True se almeno un volto rilevato.
     """
-    from penelope.ingestion.metadata import _guess_mime as _gm
+    from core.ingestion.metadata import _guess_mime as _gm
     path = Path(file_path)
     mime = _gm(path)
 
@@ -497,11 +497,11 @@ def batch_process_images(db: MariaDBStore, limit: int = 0) -> dict:
             if result:
                 with_faces += 1
             # Set analyzed flag
-            from penelope.ingestion.analyzer import set_analyzed_flag, ANALYSIS_FACE
+            from core.ingestion.analyzer import set_analyzed_flag, ANALYSIS_FACE
             set_analyzed_flag(db, r["id"], ANALYSIS_FACE, "done")
         except Exception as e:
             logger.warning("Errore su %s: %s", r["path"], e)
-            from penelope.ingestion.analyzer import set_analyzed_flag, ANALYSIS_FACE
+            from core.ingestion.analyzer import set_analyzed_flag, ANALYSIS_FACE
             set_analyzed_flag(db, r["id"], ANALYSIS_FACE, "error")
 
         if i % 50 == 0:

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from penelope.ingestion.dispatcher import Dispatcher
+from core.ingestion.dispatcher import Dispatcher
 
 
 @pytest.fixture

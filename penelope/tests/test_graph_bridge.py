@@ -4,7 +4,7 @@ Test per il bridge NetworkX ↔ MariaDB (con mock del DB).
 
 from unittest.mock import MagicMock, patch
 
-from penelope.db.graph_bridge import GraphBridge
+from core.db.graph_bridge import GraphBridge
 
 
 def fake_node(id_, type_="File", label="test", metadata=None, created_at="2025-01-01"):

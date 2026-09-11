@@ -21,8 +21,8 @@ import logging
 import time
 from typing import Optional
 
-from penelope.db.mariadb_store import MariaDBStore
-from penelope.ingestion.metadata import classify_category, _guess_mime
+from core.db.mariadb_store import MariaDBStore
+from core.ingestion.metadata import classify_category, _guess_mime
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class Dispatcher:
     @property
     def chroma(self):
         if self._chroma is None and ENABLE_EMBEDDING:
-            from penelope.db.chroma_store import ChromaStore
+            from core.db.chroma_store import ChromaStore
             self._chroma = ChromaStore()
         return self._chroma
 
@@ -101,7 +101,7 @@ class Dispatcher:
             # video  → solo metadati contenitore + relazioni (nessuna scene detection)
             # document → NER + embedding + SIMILAR_TO + date
             # other  → embedding base + date
-            from penelope.ingestion.metadata import _guess_mime as _gm, classify_category as _cc
+            from core.ingestion.metadata import _guess_mime as _gm, classify_category as _cc
             category = _cc(_gm(Path(file_path)), Path(file_path))
 
             ok = False
@@ -131,7 +131,7 @@ class Dispatcher:
 
         # YOLO (oggetti) + face (se persona) — evita ri-analisi
         try:
-            from penelope.ingestion.analyzer import analyze_image
+            from core.ingestion.analyzer import analyze_image
             res = analyze_image(node_id, file_path, self.db)
             ok = bool(res.get("objects")) or res.get("faces", 0) > 0
         except Exception as e:
@@ -140,7 +140,7 @@ class Dispatcher:
         # EXIF (metadati foto)
         if ENABLE_EXIF:
             try:
-                from penelope.ingestion.processor import process_exif
+                from core.ingestion.processor import process_exif
                 process_exif(node_id, file_path, self.db)
             except Exception as e:
                 logger.debug("EXIF fallito per %s: %s", file_path, e)
@@ -148,7 +148,7 @@ class Dispatcher:
         # Embedding CLIP
         if ENABLE_IMAGE_EMBEDDING and self.chroma:
             try:
-                from penelope.ingestion.processor import process_image_embedding
+                from core.ingestion.processor import process_image_embedding
                 ok = ok or process_image_embedding(node_id, file_path, self.db, self.chroma)
             except Exception as e:
                 logger.debug("CLIP fallito per %s: %s", file_path, e)
@@ -156,13 +156,13 @@ class Dispatcher:
         # Event nodes da data + geocoding GPS
         if ENABLE_DATE_EVENTS:
             try:
-                from penelope.ingestion.processor import process_date_event
+                from core.ingestion.processor import process_date_event
                 process_date_event(node_id, file_path, self.db)
             except Exception as e:
                 logger.debug("Date event fallito per %s: %s", file_path, e)
         if ENABLE_GEOCODING:
             try:
-                from penelope.ingestion.processor import process_geocoding
+                from core.ingestion.processor import process_geocoding
                 process_geocoding(node_id, file_path, self.db)
             except Exception as e:
                 logger.debug("Geocoding fallito per %s: %s", file_path, e)
@@ -177,7 +177,7 @@ class Dispatcher:
         """
         ok = False
         try:
-            from penelope.ingestion.analyzer import analyze_video
+            from core.ingestion.analyzer import analyze_video
             res = analyze_video(node_id, file_path, self.db)
             ok = bool(res.get("metadata"))
         except Exception as e:
@@ -186,7 +186,7 @@ class Dispatcher:
         # Event da data nel filename/creazione
         if ENABLE_DATE_EVENTS:
             try:
-                from penelope.ingestion.processor import process_date_event
+                from core.ingestion.processor import process_date_event
                 ok = ok or process_date_event(node_id, file_path, self.db)
             except Exception as e:
                 logger.debug("Date event per video fallito: %s", e)
@@ -197,7 +197,7 @@ class Dispatcher:
         """Documenti: NER + embedding semantico + SIMILAR_TO + date."""
         ok = False
         try:
-            from penelope.ingestion.analyzer import analyze_document
+            from core.ingestion.analyzer import analyze_document
             res = analyze_document(
                 node_id, file_path, self.db,
                 self.chroma if ENABLE_EMBEDDING else None,
@@ -209,7 +209,7 @@ class Dispatcher:
         # Fallback: embedding base
         if ENABLE_EMBEDDING and self.chroma and not ok:
             try:
-                from penelope.ingestion.processor import process_embedding
+                from core.ingestion.processor import process_embedding
                 ok = process_embedding(node_id, file_path, self.db, self.chroma)
             except Exception as e:
                 logger.debug("Embedding fallito per %s: %s", file_path, e)
@@ -217,7 +217,7 @@ class Dispatcher:
         # Event da data
         if ENABLE_DATE_EVENTS:
             try:
-                from penelope.ingestion.processor import process_date_event
+                from core.ingestion.processor import process_date_event
                 ok = ok or process_date_event(node_id, file_path, self.db)
             except Exception as e:
                 logger.debug("Date event per doc fallito: %s", e)
@@ -231,14 +231,14 @@ class Dispatcher:
         # Embedding se testo (anche se mime dice other)
         if ENABLE_EMBEDDING and self.chroma:
             try:
-                from penelope.ingestion.processor import process_embedding
+                from core.ingestion.processor import process_embedding
                 ok = process_embedding(node_id, file_path, self.db, self.chroma)
             except Exception as e:
                 logger.debug("Embedding fallito per %s: %s", file_path, e)
 
         if ENABLE_DATE_EVENTS:
             try:
-                from penelope.ingestion.processor import process_date_event
+                from core.ingestion.processor import process_date_event
                 ok = ok or process_date_event(node_id, file_path, self.db)
             except Exception as e:
                 logger.debug("Date event per other fallito: %s", e)

@@ -5,7 +5,7 @@ Test per l'estrazione metadati.
 import tempfile
 from pathlib import Path
 
-from penelope.ingestion.metadata import FileMetadata
+from core.ingestion.metadata import FileMetadata
 
 
 def test_basic_metadata():

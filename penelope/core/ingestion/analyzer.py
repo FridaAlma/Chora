@@ -18,7 +18,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from penelope.db.mariadb_store import MariaDBStore
+from core.db.mariadb_store import MariaDBStore
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def analyze_image(
     result = {"objects": [], "faces": 0, "face_details": []}
 
     # ─── YOLO object detection (tutte le 80 classi COCO) ───────
-    from penelope.ingestion.metadata import _guess_mime as _gm
+    from core.ingestion.metadata import _guess_mime as _gm
     path = Path(file_path)
     mime = _gm(path)
 
@@ -139,7 +139,7 @@ def analyze_image(
             cls_id = int(boxes.cls[i].item())
             conf = float(boxes.conf[i].item())
             x1, y1, x2, y2 = boxes.xyxy[i].tolist()
-            from penelope.ingestion.yolo_coco import COCO_CLASSES
+            from core.ingestion.yolo_coco import COCO_CLASSES
             label = COCO_CLASSES.get(cls_id, f"unknown_{cls_id}")
             detections.append({
                 "label": label,
@@ -203,7 +203,7 @@ def _analyze_faces(
         return result
 
     try:
-        from penelope.recognition.deepface_engine import detect_faces, process_face_embedding
+        from core.recognition.deepface_engine import detect_faces, process_face_embedding
     except ImportError:
         logger.warning("InsightFace non installato (pip install insightface onnxruntime)")
         set_analyzed_flag(db, node_id, ANALYSIS_FACE, "error")
@@ -277,7 +277,7 @@ def analyze_video(
             )
 
     # ─── Crea relazioni dai metadati ───────────────────────────
-    from penelope.ingestion.processor import process_date_event, process_geocoding
+    from core.ingestion.processor import process_date_event, process_geocoding
 
     # Data di creazione → Event node (CREATED_AT)
     if meta.get("creation_date"):
@@ -474,7 +474,7 @@ def analyze_document(
     """
     result = {"text": None, "ner_count": 0, "embedded": False, "similar": 0}
     path = Path(file_path)
-    from penelope.ingestion.metadata import _guess_mime as _gm
+    from core.ingestion.metadata import _guess_mime as _gm
     mime = _gm(path)
 
     # Solo documenti non-binari
@@ -495,7 +495,7 @@ def analyze_document(
     # ─── 1. NER: crea nodi Person/Location + MENTIONS ──────────
     if needs_analysis(db, node_id, ANALYSIS_NER):
         try:
-            from penelope.ingestion.processor import process_ner
+            from core.ingestion.processor import process_ner
             ner_count = process_ner(node_id, file_path, db)
             result["ner_count"] = ner_count
             set_analyzed_flag(db, node_id, ANALYSIS_NER, "done" if ner_count > 0 else "done")
@@ -506,7 +506,7 @@ def analyze_document(
     # ─── 2. Embedding semantico → ChromaDB ─────────────────────
     if needs_analysis(db, node_id, ANALYSIS_SEM) and chroma is not None:
         try:
-            from penelope.ingestion.processor import process_embedding
+            from core.ingestion.processor import process_embedding
             embedded = process_embedding(node_id, file_path, db, chroma)
             result["embedded"] = embedded
             if embedded:
@@ -521,7 +521,7 @@ def analyze_document(
 
     # ─── 4. Data da filename → Event ──────────────────────────
     try:
-        from penelope.ingestion.processor import process_date_event
+        from core.ingestion.processor import process_date_event
         process_date_event(node_id, file_path, db)
     except Exception as e:
         logger.debug("process_date_event per doc fallito: %s", e)

@@ -1,7 +1,6 @@
 """Modelli dati condivisi per Archimede in Oracle.
 
-Rispetto alla versione originale (Person of Interest), questi modelli
-sono focalizzati su: foto, persone, matching facciale e risultati di
+questi modelli sono focalizzati su: foto, persone, matching facciale e risultati di
 query sul grafo Penelope.
 """
 

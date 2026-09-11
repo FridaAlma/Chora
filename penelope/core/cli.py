@@ -16,12 +16,12 @@ import logging
 import sys
 from pathlib import Path
 
-from penelope.config import settings
-from penelope.db.graph_bridge import GraphBridge
-from penelope.db.mariadb_store import MariaDBStore
+from core.config import settings
+from core.db.graph_bridge import GraphBridge
+from core.db.mariadb_store import MariaDBStore
 from egida.quarantine import Quarantine
-from penelope.ingestion.dispatcher import Dispatcher
-from penelope.ingestion.scanner import FileScanner
+from core.ingestion.dispatcher import Dispatcher
+from core.ingestion.scanner import FileScanner
 
 logger = logging.getLogger("penelope")
 
@@ -36,8 +36,8 @@ def _setup_logging(level: str = None):
 
 def cmd_watchdog(args):
     """Watchdog: osservazione file system in tempo reale."""
-    from penelope.ingestion.scanner import WatchdogManager
-    from penelope.config import settings as _settings
+    from core.ingestion.scanner import WatchdogManager
+    from core.config import settings as _settings
 
     _managers = []
 
@@ -146,7 +146,7 @@ def cmd_scan(args):
 
 def cmd_scan_all(args):
     """Scansiona tutti gli storage configurati."""
-    from penelope.config.settings import STORAGE_PATHS
+    from core.config.settings import STORAGE_PATHS
 
     for device, path_str in STORAGE_PATHS.items():
         if not path_str:
@@ -207,7 +207,7 @@ def cmd_queue(args):
 
 def cmd_search(args):
     """Ricerca semantica nel grafo."""
-    from penelope.db.chroma_store import ChromaStore
+    from core.db.chroma_store import ChromaStore
 
     chroma = ChromaStore()
     results = chroma.search_similar(args.query, top_k=args.top, filter_mime=args.mime)
@@ -295,7 +295,7 @@ def cmd_graph(args):
 
 def cmd_configure(args):
     """Configura le credenziali di Penelope nel keyring di sistema."""
-    from penelope.config.settings import (
+    from core.config.settings import (
         _store_password_in_keyring,
         _delete_password_from_keyring,
     )
@@ -324,7 +324,7 @@ def cmd_configure(args):
     elif args.action == "test":
         """Testa la connessione al database con le credenziali correnti."""
         try:
-            from penelope.db.mariadb_store import MariaDBStore
+            from core.db.mariadb_store import MariaDBStore
             db = MariaDBStore()
             conn = db.connect()
             with conn.cursor() as cur:
@@ -339,7 +339,7 @@ def cmd_configure(args):
 
 def cmd_db(args):
     """Operazioni sul database (pulizia, dedup, reset)."""
-    from penelope.db.mariadb_store import MariaDBStore
+    from core.db.mariadb_store import MariaDBStore
 
     if args.action == "dedup":
         db = MariaDBStore()
@@ -574,7 +574,7 @@ def cmd_db(args):
 
 def cmd_device(args):
     """Gestione device e mount per-host (device_mounts)."""
-    from penelope.db.mariadb_store import MariaDBStore
+    from core.db.mariadb_store import MariaDBStore
 
     db = MariaDBStore()
 
@@ -612,7 +612,7 @@ def cmd_device(args):
             mount_id = store.upsert_device_mount(device_id, hostname, mount_path)
 
             # 3. Scrivi marker .penelope_device.json per reconcile_devices()
-            from penelope.discovery import write_device_marker
+            from core.discovery import write_device_marker
             write_device_marker(mount_path, device_id, label)
 
             print(f"[DEVICE] Registrato: {label} (id={device_id})")
@@ -663,7 +663,7 @@ def cmd_device(args):
 
     elif args.action == "merge":
         """Fonde un device in un altro: unifica file_registry, mount e marker."""
-        from penelope.discovery import write_device_marker
+        from core.discovery import write_device_marker
 
         keep_id = args.keep
         remove_id = args.remove
@@ -702,7 +702,7 @@ def cmd_device(args):
             keep_mounts = store.list_device_mounts(device_id=keep_id)
 
             # Marker file attuali
-            from penelope.discovery import read_device_marker
+            from core.discovery import read_device_marker
 
             marker_info = {}
             for m in remove_mounts:
@@ -782,8 +782,8 @@ def cmd_device(args):
 
 def cmd_geo(args):
     """Geocoding GPS: coordinate EXIF → Location nodes."""
-    from penelope.db.mariadb_store import MariaDBStore
-    from penelope.ingestion.processor import process_geocoding
+    from core.db.mariadb_store import MariaDBStore
+    from core.ingestion.processor import process_geocoding
 
     if args.action == "process":
         """Processa tutti i file con GPS nei metadati."""
@@ -819,7 +819,7 @@ def cmd_geo(args):
 
     elif args.action == "test":
         """Test Nominatim con coordinate di esempio."""
-        from penelope.ingestion.processor import _reverse_geocode
+        from core.ingestion.processor import _reverse_geocode
 
         # Test con coordinate note
         test_coords = [
@@ -838,13 +838,13 @@ def cmd_geo(args):
                 print("  Errore")
 
         # Mostra stato cache
-        from penelope.ingestion.processor import _load_geocode_cache
+        from core.ingestion.processor import _load_geocode_cache
         cache = _load_geocode_cache()
         print(f"\nCache geocoding: {len(cache)} entries")
 
     elif args.action == "cache":
         """Mostra/gestisce la cache geocoding."""
-        from penelope.ingestion.processor import _load_geocode_cache, _GEOCODE_CACHE_PATH
+        from core.ingestion.processor import _load_geocode_cache, _GEOCODE_CACHE_PATH
         cache = _load_geocode_cache()
         print(f"\n[GEO] Cache geocoding:")
         print(f"   File: {_GEOCODE_CACHE_PATH}")
@@ -859,8 +859,8 @@ def cmd_geo(args):
 
 def cmd_event(args):
     """Gestione nodi Event (data, scene, calendario)."""
-    from penelope.db.mariadb_store import MariaDBStore
-    from penelope.ingestion.processor import process_date_event
+    from core.db.mariadb_store import MariaDBStore
+    from core.ingestion.processor import process_date_event
 
     if args.action == "create-from-dates":
         """Crea Event nodes dalla data nei nomi file."""
@@ -971,8 +971,8 @@ def cmd_event(args):
 
 def cmd_video(args):
     """Scene detection per video."""
-    from penelope.db.mariadb_store import MariaDBStore
-    from penelope.ingestion.processor import process_scene_detection
+    from core.db.mariadb_store import MariaDBStore
+    from core.ingestion.processor import process_scene_detection
 
     if args.action == "detect-scenes":
         """Rileva scene in tutti i video del grafo."""
@@ -1099,12 +1099,12 @@ def cmd_quarantine(args):
 
 def cmd_face(args):
     """Face detection e recognition via DeepFace."""
-    from penelope.db.mariadb_store import MariaDBStore
+    from core.db.mariadb_store import MariaDBStore
     import pathlib as _pl
 
     if args.action == "test":
         """Testa DeepFace su un'immagine."""
-        from penelope.recognition.deepface_engine import detect_faces
+        from core.recognition.deepface_engine import detect_faces
 
         p = _pl.Path(args.path)
         if not p.exists():
@@ -1135,7 +1135,7 @@ def cmd_face(args):
     elif args.action == "process-all":
         """Processa TUTTE le immagini con InsightFace (detection + embedding)."""
         db = MariaDBStore()
-        from penelope.recognition.deepface_engine import batch_process_images
+        from core.recognition.deepface_engine import batch_process_images
 
         print("[FACE] Processo tutte le immagini con InsightFace...")
         print("   (primo avvio: download modello buffalo_l, ~30MB)")
@@ -1172,7 +1172,7 @@ def cmd_face(args):
     elif args.action == "cluster":
         """Clustering pairwise: trova e unisce volti simili."""
         db = MariaDBStore()
-        from penelope.recognition.deepface_engine import find_similar_persons, merge_persons
+        from core.recognition.deepface_engine import find_similar_persons, merge_persons
 
         threshold = args.threshold
         print(f"[FACE] Clustering nodi Person (similarita > {threshold})...")
@@ -1196,7 +1196,7 @@ def cmd_face(args):
         db = MariaDBStore()
 
         # Carica embedding
-        from penelope.recognition.deepface_engine import load_embedding
+        from core.recognition.deepface_engine import load_embedding
 
         rows = db._query(
             "SELECT id FROM nodes WHERE type = 'Person' AND metadata LIKE %s",
@@ -1305,7 +1305,7 @@ def cmd_face(args):
     elif args.action == "reprocess":
         """Riprocessa immagini gia' processate con YOLO -> InsightFace."""
         db = MariaDBStore()
-        from penelope.recognition.deepface_engine import process_face_embedding
+        from core.recognition.deepface_engine import process_face_embedding
 
         exts = ("%.jpg", "%.jpeg", "%.png", "%.webp", "%.bmp")
         rows = db._query(

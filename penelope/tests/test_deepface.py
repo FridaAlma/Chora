@@ -43,7 +43,7 @@ def temp_image():
 
 def test_detect_faces_no_faces(mock_insightface, temp_image):
     """Nessun volto → lista vuota."""
-    from penelope.recognition.deepface_engine import detect_faces
+    from core.recognition.deepface_engine import detect_faces
 
     faces = detect_faces(temp_image)
     assert faces == []
@@ -51,7 +51,7 @@ def test_detect_faces_no_faces(mock_insightface, temp_image):
 
 def test_detect_faces_with_faces(mock_insightface, temp_image):
     """Con volti → restituisce embedding e metadati."""
-    from penelope.recognition.deepface_engine import detect_faces
+    from core.recognition.deepface_engine import detect_faces
 
     mock_app = mock_insightface.return_value
     mock_face = MagicMock()
@@ -75,7 +75,7 @@ def test_detect_faces_with_faces(mock_insightface, temp_image):
 
 def test_cosine_similarity_identical():
     """Due embedding identici → similarità 1.0."""
-    from penelope.recognition.deepface_engine import cosine_similarity
+    from core.recognition.deepface_engine import cosine_similarity
 
     emb = [1.0] * 512
     sim = cosine_similarity(emb, emb)
@@ -84,7 +84,7 @@ def test_cosine_similarity_identical():
 
 def test_cosine_similarity_orthogonal():
     """Due embedding ortogonali → similarità ~0.0."""
-    from penelope.recognition.deepface_engine import cosine_similarity
+    from core.recognition.deepface_engine import cosine_similarity
 
     emb_a = [1.0, 0.0] + [0.0] * 510
     emb_b = [0.0, 1.0] + [0.0] * 510
@@ -94,7 +94,7 @@ def test_cosine_similarity_orthogonal():
 
 def test_verify_faces_match():
     """Due embedding identici → verified=True."""
-    from penelope.recognition.deepface_engine import verify_faces
+    from core.recognition.deepface_engine import verify_faces
 
     emb = np.random.rand(512).astype(np.float32)
     emb = emb / np.linalg.norm(emb)
@@ -107,7 +107,7 @@ def test_verify_faces_match():
 
 def test_verify_faces_no_match():
     """Due embedding diversi → verified=False."""
-    from penelope.recognition.deepface_engine import verify_faces
+    from core.recognition.deepface_engine import verify_faces
 
     emb1 = np.random.rand(512).astype(np.float32)
     emb1 = emb1 / np.linalg.norm(emb1)
@@ -120,8 +120,8 @@ def test_verify_faces_no_match():
 
 def test_save_and_load_embedding(tmp_path):
     """Salva e carica embedding da file .npy."""
-    from penelope.recognition.deepface_engine import save_embedding, load_embedding
-    import penelope.recognition.deepface_engine as df
+    from core.recognition.deepface_engine import save_embedding, load_embedding
+    import core.recognition.deepface_engine as df
 
     orig_dir = df.EMBEDDINGS_DIR
     df.EMBEDDINGS_DIR = Path(tmp_path)
@@ -141,7 +141,7 @@ def test_save_and_load_embedding(tmp_path):
 
 def test_process_face_embedding_non_image(mock_insightface):
     """File non immagine → skip."""
-    from penelope.recognition.deepface_engine import process_face_embedding
+    from core.recognition.deepface_engine import process_face_embedding
     db = MagicMock()
     db.__enter__.return_value = db
 
@@ -152,7 +152,7 @@ def test_process_face_embedding_non_image(mock_insightface):
 
 def test_process_face_embedding_no_faces(mock_insightface, temp_image):
     """Immagine senza volti → False."""
-    from penelope.recognition.deepface_engine import process_face_embedding
+    from core.recognition.deepface_engine import process_face_embedding
     db = MagicMock()
     db.__enter__.return_value = db
 
@@ -162,7 +162,7 @@ def test_process_face_embedding_no_faces(mock_insightface, temp_image):
 
 def test_process_face_embedding_with_faces(mock_insightface, temp_image):
     """Immagine con volti → crea nodi Person e aggiorna metadati."""
-    from penelope.recognition.deepface_engine import process_face_embedding
+    from core.recognition.deepface_engine import process_face_embedding
 
     # Configura detect_faces per restituire un volto
     mock_app = mock_insightface.return_value

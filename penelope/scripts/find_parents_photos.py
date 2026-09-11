@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 from loguru import logger
 
-from penelope.db.mariadb_store import MariaDBStore
+from core.db.mariadb_store import MariaDBStore
 
 # ─── Configurazione ─────────────────────────────────────────────────
 EMBEDDINGS_DIR = Path("data/embeddings")
@@ -460,7 +460,7 @@ def interactive_mode():
 
 def cluster_mode():
     """Modalità clustering: trova gruppi di volti simili, chiede all'utente di identificarli."""
-    from penelope.recognition.deepface_engine import (
+    from core.recognition.deepface_engine import (
         find_similar_persons,
         load_embedding,
     )

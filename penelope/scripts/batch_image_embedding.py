@@ -14,9 +14,9 @@ from pathlib import Path
 # Aggiunge la radice del progetto al path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from penelope.db.mariadb_store import MariaDBStore
-from penelope.db.chroma_store import ChromaStore
-from penelope.ingestion.processor import process_image_embedding
+from core.db.mariadb_store import MariaDBStore
+from core.db.chroma_store import ChromaStore
+from core.ingestion.processor import process_image_embedding
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,7 +35,7 @@ def main():
 
     # Pre-carica CLIP (la prima volta scarica i pesi ~30s)
     logger.info("Pre-caricamento modello CLIP...")
-    from penelope.ingestion.image_embedder import get_image_embedding
+    from core.ingestion.image_embedder import get_image_embedding
     # Carica una prima immagine per forzare il download del modello
     conn = db.connect()
     with conn.cursor() as cur:

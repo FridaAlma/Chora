@@ -21,11 +21,11 @@ from typing import Callable, Optional
 import watchdog.events
 import watchdog.observers
 
-from penelope.config import settings
-from penelope.db.mariadb_store import MariaDBStore
+from core.config import settings
+from core.db.mariadb_store import MariaDBStore
 from egida.filters import HSDFilter, HSDMatch
 from egida.quarantine import Quarantine
-from penelope.ingestion.metadata import FileMetadata, classify_category
+from core.ingestion.metadata import FileMetadata, classify_category
 
 logger = logging.getLogger(__name__)
 
@@ -521,11 +521,11 @@ class FileScanner:
 
     def _run_deep_analysis(self, results: list[ScanResult]) -> None:
         """Fase B: analisi contenuto su tutti i file scanditi."""
-        from penelope.ingestion.analyzer import (
+        from core.ingestion.analyzer import (
             analyze_image, analyze_video, analyze_document,
             needs_analysis, ANALYSIS_YOLO, ANALYSIS_META, ANALYSIS_NER,
         )
-        from penelope.db.chroma_store import ChromaStore
+        from core.db.chroma_store import ChromaStore
 
         logger.info("Analisi profonda (deep) avviata su %d file...", len(results))
 
@@ -538,7 +538,7 @@ class FileScanner:
                 continue
 
             path = Path(res.file_path)
-            from penelope.ingestion.metadata import _guess_mime
+            from core.ingestion.metadata import _guess_mime
             mime = _guess_mime(path)
             category = classify_category(mime, path)
 
@@ -745,7 +745,7 @@ class FileCreationHandler(watchdog.events.FileSystemEventHandler):
                     return
 
                 # 2. Metadati
-                from penelope.ingestion.metadata import FileMetadata
+                from core.ingestion.metadata import FileMetadata
                 meta = FileMetadata(fpath)
                 category = classify_category(meta.mime_type, fpath)
 

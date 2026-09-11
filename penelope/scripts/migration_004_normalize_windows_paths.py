@@ -35,7 +35,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=str(_PROJECT_ROOT / ".env"), override=True)
 
-from penelope.db.mariadb_store import MariaDBStore
+from core.db.mariadb_store import MariaDBStore
 
 logger = logging.getLogger("migration_004")
 

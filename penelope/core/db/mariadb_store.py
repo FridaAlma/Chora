@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import pymysql
 import pymysql.cursors
-from penelope.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class MariaDBStore:
             return rows[0]["id"]
         category = None
         if coco_class_id is not None:
-            from penelope.ingestion.yolo_coco import COCO_CATEGORY
+            from core.ingestion.yolo_coco import COCO_CATEGORY
             category = COCO_CATEGORY.get(coco_class_id)
         self._execute(
             "INSERT INTO objects (label, coco_class_id, category) VALUES (%s, %s, %s)",
